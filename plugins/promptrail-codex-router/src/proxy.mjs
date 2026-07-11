@@ -1,0 +1,252 @@
+import http from "node:http";
+import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
+import { pathToFileURL } from "node:url";
+
+import {
+  CHATGPT_UPSTREAM_BASE_URL,
+  loadRouterConfig,
+} from "./config.mjs";
+import { gradePrompt } from "./grader-client.mjs";
+import { applyGrade, effortForGrade, extractLatestUserPrompt } from "./routing.mjs";
+
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "content-length",
+  "host",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+function jsonResponse(response, status, payload, extraHeaders = {}) {
+  const body = `${JSON.stringify(payload)}\n`;
+  response.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+    ...extraHeaders,
+  });
+  response.end(body);
+}
+
+async function readRequestBody(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) {
+      throw new RangeError(`Request body exceeds ${MAX_BODY_BYTES} bytes.`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+function assertSubscriptionAuth(request) {
+  const authorization = String(request.headers.authorization || "");
+  const accountId = String(request.headers["chatgpt-account-id"] || "");
+  if (!authorization.startsWith("Bearer ") || !accountId.trim()) {
+    const error = new Error(
+      "ChatGPT subscription authentication is required. Run `codex login` and sign in with ChatGPT, not an API key.",
+    );
+    error.statusCode = 401;
+    error.code = "chatgpt_subscription_required";
+    throw error;
+  }
+}
+
+function assertRouterAuth(request, routerToken) {
+  if (String(request.headers.authorization || "") !== `Bearer ${routerToken}`) {
+    const error = new Error("PromptRail router authentication is required.");
+    error.statusCode = 401;
+    error.code = "promptrail_router_auth_required";
+    throw error;
+  }
+}
+
+function routeCacheKey(prompt, model) {
+  return createHash("sha256").update(`${model}\0${prompt}`).digest("hex");
+}
+
+function validateRouteInput(payload) {
+  const prompt = String(payload?.prompt || "").trim();
+  const model = String(payload?.model || "").trim();
+  if (!prompt) {
+    throw new TypeError("PromptRail route request requires a non-empty prompt.");
+  }
+  if (!model) {
+    throw new TypeError("PromptRail route request requires a model.");
+  }
+  return { prompt, model };
+}
+
+function forwardHeaders(incomingHeaders, body) {
+  const headers = {};
+  for (const [name, value] of Object.entries(incomingHeaders)) {
+    if (!HOP_BY_HOP_HEADERS.has(name.toLowerCase()) && value !== undefined) {
+      headers[name] = Array.isArray(value) ? value.join(", ") : value;
+    }
+  }
+  headers["accept-encoding"] = "identity";
+  if (body !== undefined) {
+    headers["content-type"] = "application/json";
+    headers["content-length"] = String(Buffer.byteLength(body));
+  }
+  return headers;
+}
+
+async function pipeFetchResponse(upstream, response, route) {
+  const headers = {};
+  upstream.headers.forEach((value, name) => {
+    if (!HOP_BY_HOP_HEADERS.has(name.toLowerCase())) {
+      headers[name] = value;
+    }
+  });
+  if (route) {
+    headers["x-promptrail-grade"] = String(route.grade);
+    headers["x-promptrail-effort"] = route.effort;
+  }
+  response.writeHead(upstream.status, headers);
+  if (!upstream.body) {
+    response.end();
+    return;
+  }
+  await new Promise((resolve, reject) => {
+    const stream = Readable.fromWeb(upstream.body);
+    stream.on("error", reject);
+    response.on("error", reject);
+    response.on("finish", resolve);
+    stream.pipe(response);
+  });
+}
+
+export function createProxyServer({
+  config,
+  fetchImpl = fetch,
+  upstreamBaseUrl = CHATGPT_UPSTREAM_BASE_URL,
+  logger = console,
+}) {
+  const routeCache = new Map();
+
+  function cacheRoute(prompt, model, route) {
+    const now = Date.now();
+    for (const [key, cached] of routeCache) {
+      if (now - cached.createdAt > ROUTE_CACHE_TTL_MS) {
+        routeCache.delete(key);
+      }
+    }
+    routeCache.set(routeCacheKey(prompt, model), { ...route, createdAt: now });
+  }
+
+  function requireCachedRoute(prompt, model) {
+    const key = routeCacheKey(prompt, model);
+    const cached = routeCache.get(key);
+    if (!cached || Date.now() - cached.createdAt > ROUTE_CACHE_TTL_MS) {
+      routeCache.delete(key);
+      const error = new Error(
+        "Thinking level was not selected before the Codex request. Start a new thread so the PromptRail UserPromptSubmit hook is loaded.",
+      );
+      error.statusCode = 409;
+      error.code = "promptrail_route_missing";
+      throw error;
+    }
+    return cached;
+  }
+
+  return http.createServer(async (request, response) => {
+    if (request.method === "GET" && request.url === "/health") {
+      jsonResponse(response, 200, {
+        status: "ok",
+        mode: "chatgpt-subscription-only",
+        grades: 6,
+      });
+      return;
+    }
+
+    try {
+      if (request.method === "POST" && request.url === "/route") {
+        assertRouterAuth(request, config.routerToken);
+        const { prompt, model } = validateRouteInput(JSON.parse(await readRequestBody(request)));
+        const graded = await gradePrompt({
+          graderUrl: config.graderUrl,
+          routerToken: config.routerToken,
+          prompt,
+          model,
+          fetchImpl,
+        });
+        const route = { ...graded, effort: effortForGrade(graded.grade) };
+        cacheRoute(prompt, model, route);
+        jsonResponse(response, 200, route);
+        return;
+      }
+
+      assertSubscriptionAuth(request);
+      let bodyText;
+      let route;
+      if (request.method === "POST") {
+        bodyText = await readRequestBody(request);
+      }
+      if (request.method === "POST" && request.url === "/responses") {
+        const requestBody = JSON.parse(bodyText);
+        const prompt = extractLatestUserPrompt(requestBody);
+        const graded = requireCachedRoute(prompt, requestBody.model);
+        const applied = applyGrade(requestBody, graded.grade);
+        bodyText = JSON.stringify(applied.body);
+        route = { ...graded, effort: applied.effort };
+        logger.info?.(
+          JSON.stringify({
+            event: "promptrail_route",
+            grade: route.grade,
+            effort: route.effort,
+            grader_latency_ms: route.latencyMs,
+          }),
+        );
+      }
+
+      const upstreamUrl = `${upstreamBaseUrl.replace(/\/$/, "")}${request.url}`;
+      const upstream = await fetchImpl(upstreamUrl, {
+        method: request.method,
+        headers: forwardHeaders(request.headers, bodyText),
+        body: bodyText,
+        redirect: "manual",
+      });
+      await pipeFetchResponse(upstream, response, route);
+    } catch (error) {
+      if (response.headersSent) {
+        response.destroy(error);
+        return;
+      }
+      const status = Number(error.statusCode) || (error instanceof RangeError ? 422 : 502);
+      jsonResponse(response, status, {
+        error: error.code || "promptrail_router_error",
+        message: error.message,
+      });
+    }
+  });
+}
+
+export async function startProxy() {
+  const config = await loadRouterConfig();
+  const server = createProxyServer({ config });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(config.port, config.host, resolve);
+  });
+  process.stdout.write(
+    `${JSON.stringify({ event: "promptrail_proxy_started", host: config.host, port: config.port })}\n`,
+  );
+  return server;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startProxy().catch((error) => {
+    process.stderr.write(`PromptRail proxy failed: ${error.stack || error.message}\n`);
+    process.exitCode = 1;
+  });
+}

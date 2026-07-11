@@ -1,0 +1,36 @@
+{
+  "name": "promptrail-codex-router",
+  "version": "0.1.0+codex.20260711032306",
+  "description": "Automatically selects one of six Codex reasoning-effort levels while preserving ChatGPT subscription billing.",
+  "author": {
+    "name": "PromptRail",
+    "url": "https://promptrail.ai"
+  },
+  "homepage": "https://promptrail.ai",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "reasoning",
+    "routing",
+    "subscription"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "PromptRail Codex Router",
+    "shortDescription": "Automatic Codex reasoning-effort routing",
+    "longDescription": "Classifies each Codex prompt into one of six reasoning levels. The local proxy keeps OpenAI authentication on the user's machine and uses the user's ChatGPT subscription.",
+    "developerName": "PromptRail",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Reasoning routing",
+      "Local proxy"
+    ],
+    "websiteURL": "https://promptrail.ai",
+    "defaultPrompt": [
+      "How much time and money do I save by using PromptRail?"
+    ],
+    "brandColor": "#111827",
+    "composerIcon": "./assets/promptrail-logo.png",
+    "logo": "./assets/promptrail-logo.png"
+  }
+}

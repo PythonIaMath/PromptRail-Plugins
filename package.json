@@ -1,0 +1,32 @@
+{
+  "name": "@promptrail/plugins",
+  "version": "0.1.0",
+  "description": "Open-source PromptRail reasoning-effort routers for Codex and Claude Code.",
+  "type": "module",
+  "bin": {
+    "promptrail-codex-router": "./bin/promptrail-codex-router.mjs",
+    "promptrail-claude-router": "./bin/promptrail-claude-router.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:codex": "node --test test/codex",
+    "test:claude": "node --test test/claude"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PythonIaMath/PrompRails-Plugins.git"
+  },
+  "homepage": "https://promptrail.ai",
+  "license": "MIT",
+  "keywords": [
+    "promptrail",
+    "codex",
+    "claude-code",
+    "reasoning",
+    "effort",
+    "routing"
+  ]
+}

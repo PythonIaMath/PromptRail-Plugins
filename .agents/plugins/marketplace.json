@@ -1,0 +1,20 @@
+{
+  "name": "promptrail",
+  "interface": {
+    "displayName": "PromptRail"
+  },
+  "plugins": [
+    {
+      "name": "promptrail-codex-router",
+      "source": {
+        "source": "local",
+        "path": "./plugins/promptrail-codex-router"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

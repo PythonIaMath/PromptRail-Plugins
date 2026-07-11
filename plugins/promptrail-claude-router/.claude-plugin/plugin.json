@@ -1,0 +1,13 @@
+{
+  "name": "promptrail-claude-router",
+  "version": "0.1.0",
+  "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing.",
+  "author": {
+    "name": "PromptRail",
+    "url": "https://promptrail.ai"
+  },
+  "homepage": "https://promptrail.ai",
+  "repository": "https://github.com/PythonIaMath/PrompRails-Plugins",
+  "license": "MIT",
+  "keywords": ["claude-code", "anthropic", "effort", "routing", "subscription"]
+}

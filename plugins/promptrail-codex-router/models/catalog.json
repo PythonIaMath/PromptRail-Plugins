@@ -1,0 +1,60 @@
+{
+  "models": [
+    {
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT-5.6 Sol",
+      "description": "PromptRail six-level reasoning model for Codex subscription routing.",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "none",
+          "description": "No additional reasoning for trivial work"
+        },
+        {
+          "effort": "low",
+          "description": "Fast responses with light reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balanced reasoning for everyday engineering"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex work"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra-high reasoning for very difficult work"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning for extreme single-agent work"
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "priority": 0,
+      "upgrade": null,
+      "supports_reasoning_summaries": true,
+      "default_reasoning_summary": "none",
+      "support_verbosity": true,
+      "default_verbosity": "low",
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text_and_image",
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "supports_image_detail_original": true,
+      "context_window": 272000,
+      "max_context_window": 272000,
+      "effective_context_window_percent": 95,
+      "experimental_supported_tools": [],
+      "input_modalities": ["text", "image"],
+      "supports_search_tool": true,
+      "use_responses_lite": false
+    }
+  ]
+}
