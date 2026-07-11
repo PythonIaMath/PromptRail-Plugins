@@ -14,7 +14,7 @@
       "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing",
       "category": "productivity",
       "homepage": "https://promptrail.ai",
-      "repository": "https://github.com/PythonIaMath/PrompRails-Plugins",
+      "repository": "https://github.com/PythonIaMath/PromptRail-Plugins",
       "license": "MIT",
       "keywords": ["claude-code", "effort", "routing", "subscription"]
     }

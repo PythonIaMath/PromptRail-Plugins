@@ -42,8 +42,8 @@ codex login status
 Install from this checkout:
 
 ```bash
-git clone https://github.com/PythonIaMath/PrompRails-Plugins.git
-cd PrompRails-Plugins
+git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
+cd PromptRail-Plugins
 
 node bin/promptrail-codex-router.mjs install \
   --grader-url "https://promptrail--promptrail-codex-effort-grader-effortgrader-web.modal.run" \
@@ -76,8 +76,8 @@ claude auth status --json
 Install from this checkout:
 
 ```bash
-git clone https://github.com/PythonIaMath/PrompRails-Plugins.git
-cd PrompRails-Plugins
+git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
+cd PromptRail-Plugins
 
 node bin/promptrail-claude-router.mjs install \
   --grader-url "https://promptrail--promptrail-claude-effort-grader-claudeeffort-f35715.modal.run" \

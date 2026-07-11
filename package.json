@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PythonIaMath/PrompRails-Plugins.git"
+    "url": "git+https://github.com/PythonIaMath/PromptRail-Plugins.git"
   },
   "homepage": "https://promptrail.ai",
   "license": "MIT",

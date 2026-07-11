@@ -7,7 +7,7 @@
     "url": "https://promptrail.ai"
   },
   "homepage": "https://promptrail.ai",
-  "repository": "https://github.com/PythonIaMath/PrompRails-Plugins",
+  "repository": "https://github.com/PythonIaMath/PromptRail-Plugins",
   "license": "MIT",
   "keywords": ["claude-code", "anthropic", "effort", "routing", "subscription"]
 }
