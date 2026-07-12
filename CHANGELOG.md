@@ -10,3 +10,6 @@ All notable changes to PromptRail Plugins are documented here.
 - Installable PromptRail effort router for Claude Code using claude.ai subscription authentication.
 - Public Codex and Claude marketplace catalogs, reversible installers, local services, and status checks.
 - Strict subscription-only enforcement, authenticated routing, and regression tests for both clients.
+- One-command npm installer for Codex and Claude Code with hidden token entry and production defaults.
+- Automatic detection of a Codex CLI that supports plugin installation.
+- Direct routing for Codex Desktop background requests that do not invoke the prompt hook, preventing stale 409 errors.

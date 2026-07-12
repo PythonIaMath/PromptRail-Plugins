@@ -20,6 +20,34 @@ classification technology, evaluation data, and infrastructure are not part of t
 Both integrations fail visibly when routing, authentication, or protocol validation fails. They
 do not silently select a default effort or switch to API billing.
 
+## Quick install
+
+Install the Codex router with one command:
+
+```bash
+npx @promptrail/plugins install codex
+```
+
+The installer asks for the PromptRail access token without echoing it. For automated installs,
+provide the token through the environment:
+
+```bash
+PROMPTRAIL_ACCESS_TOKEN="..." npx @promptrail/plugins install codex
+```
+
+Claude Code uses the same command shape:
+
+```bash
+npx @promptrail/plugins install claude
+```
+
+Check or remove an installation with `status` or `uninstall`:
+
+```bash
+npx @promptrail/plugins status codex
+npx @promptrail/plugins uninstall codex
+```
+
 ## Before installing
 
 You need:
@@ -39,7 +67,7 @@ Codex must be authenticated with ChatGPT:
 codex login status
 ```
 
-Install from this checkout:
+The quick installer above is recommended. To install from a source checkout instead:
 
 ```bash
 git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
@@ -73,7 +101,7 @@ third-party gateways are rejected.
 claude auth status --json
 ```
 
-Install from this checkout:
+The quick installer above is recommended. To install from a source checkout instead:
 
 ```bash
 git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
