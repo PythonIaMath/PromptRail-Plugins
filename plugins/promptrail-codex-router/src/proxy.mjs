@@ -144,19 +144,31 @@ export function createProxyServer({
     routeCache.set(routeCacheKey(prompt, model), { ...route, createdAt: now });
   }
 
-  function requireCachedRoute(prompt, model) {
+  function cachedRoute(prompt, model) {
     const key = routeCacheKey(prompt, model);
     const cached = routeCache.get(key);
     if (!cached || Date.now() - cached.createdAt > ROUTE_CACHE_TTL_MS) {
       routeCache.delete(key);
-      const error = new Error(
-        "Thinking level was not selected before the Codex request. Start a new thread so the PromptRail UserPromptSubmit hook is loaded.",
-      );
-      error.statusCode = 409;
-      error.code = "promptrail_route_missing";
-      throw error;
+      return null;
     }
     return cached;
+  }
+
+  async function selectRoute(prompt, model) {
+    const cached = cachedRoute(prompt, model);
+    if (cached) {
+      return { ...cached, source: "hook_cache" };
+    }
+    const graded = await gradePrompt({
+      graderUrl: config.graderUrl,
+      routerToken: config.routerToken,
+      prompt,
+      model,
+      fetchImpl,
+    });
+    const route = { ...graded, effort: effortForGrade(graded.grade) };
+    cacheRoute(prompt, model, route);
+    return { ...route, source: "proxy_request" };
   }
 
   return http.createServer(async (request, response) => {
@@ -195,7 +207,7 @@ export function createProxyServer({
       if (request.method === "POST" && request.url === "/responses") {
         const requestBody = JSON.parse(bodyText);
         const prompt = extractLatestUserPrompt(requestBody);
-        const graded = requireCachedRoute(prompt, requestBody.model);
+        const graded = await selectRoute(prompt, requestBody.model);
         const applied = applyGrade(requestBody, graded.grade);
         bodyText = JSON.stringify(applied.body);
         route = { ...graded, effort: applied.effort };
@@ -204,6 +216,7 @@ export function createProxyServer({
             event: "promptrail_route",
             grade: route.grade,
             effort: route.effort,
+            route_source: graded.source,
             grader_latency_ms: route.latencyMs,
           }),
         );
