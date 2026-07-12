@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -23,10 +24,42 @@ import { startProxy } from "../plugins/promptrail-codex-router/src/proxy.mjs";
 import { installUserService, uninstallUserService } from "../lib/codex-user-service.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+let resolvedCodexBinary;
 
 function option(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? undefined : process.argv[index + 1];
+}
+
+function codexBinary() {
+  if (resolvedCodexBinary) {
+    return resolvedCodexBinary;
+  }
+  const explicit = process.env.CODEX_BIN || process.env.CODEX_CLI_PATH;
+  const candidates = explicit
+    ? [explicit]
+    : [
+        "codex",
+        ...(process.platform === "darwin"
+          ? ["/Applications/Codex.app/Contents/Resources/codex"]
+          : []),
+      ];
+  for (const candidate of candidates) {
+    if (candidate.includes("/") && !existsSync(candidate)) {
+      continue;
+    }
+    const result = spawnSync(candidate, ["plugin", "--help"], { encoding: "utf8" });
+    if (!result.error && result.status === 0) {
+      resolvedCodexBinary = candidate;
+      if (candidate !== "codex") {
+        process.stdout.write(`Using Codex CLI: ${candidate}\n`);
+      }
+      return candidate;
+    }
+  }
+  throw new Error(
+    "A Codex CLI with plugin support is required. Update Codex or set CODEX_BIN to the compatible executable.",
+  );
 }
 
 function run(command, args) {
@@ -62,8 +95,9 @@ async function install() {
   }
   let installedPluginRoot = resolve(repositoryRoot, "plugins", "promptrail-codex-router");
   if (!process.argv.includes("--skip-plugin-install")) {
-    runJson("codex", ["plugin", "marketplace", "add", repositoryRoot, "--json"]);
-    const installedPlugin = runJson("codex", [
+    const marketplaceSource = process.env.PROMPTRAIL_MARKETPLACE_SOURCE || repositoryRoot;
+    runJson(codexBinary(), ["plugin", "marketplace", "add", marketplaceSource, "--json"]);
+    const installedPlugin = runJson(codexBinary(), [
       "plugin",
       "add",
       "promptrail-codex-router@promptrail",
@@ -100,7 +134,7 @@ async function uninstall() {
   const path = await uninstallCodexConfig();
   await uninstallUserService();
   if (!process.argv.includes("--skip-plugin-remove")) {
-    run("codex", ["plugin", "remove", "promptrail-codex-router@promptrail"]);
+    run(codexBinary(), ["plugin", "remove", "promptrail-codex-router@promptrail"]);
   }
   await unlink(routerConfigPath());
   await unlink(routerModelCatalogPath());

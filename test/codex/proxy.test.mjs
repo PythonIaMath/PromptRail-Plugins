@@ -213,15 +213,22 @@ test("does not call OpenAI when the grader violates the six-grade contract", asy
   }
 });
 
-test("stops a Codex request when the thinking level was not selected first", async () => {
-  let calls = 0;
+test("grades Codex Desktop background responses that do not run UserPromptSubmit", async () => {
+  const calls = [];
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
-    fetchImpl: async () => {
-      calls += 1;
-      throw new Error("must not be called");
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://grader.test/grade") {
+        return new Response(JSON.stringify({ grade: 2, latency_ms: 9 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("ok", { status: 200 });
     },
     logger: { info() {} },
+    upstreamBaseUrl: "https://chatgpt.test/backend-api/codex",
   });
   const port = await listen(server);
   try {
@@ -234,9 +241,17 @@ test("stops a Codex request when the thinking level was not selected first", asy
       },
       body: JSON.stringify(requestBody()),
     });
-    assert.equal(response.status, 409);
-    assert.equal((await response.json()).error, "promptrail_route_missing");
-    assert.equal(calls, 0);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-promptrail-grade"), "2");
+    assert.equal(response.headers.get("x-promptrail-effort"), "low");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, "https://grader.test/grade");
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      prompt: "Design a lock-free queue.",
+      model: "gpt-5.6-sol",
+    });
+    assert.equal(calls[1].url, "https://chatgpt.test/backend-api/codex/responses");
+    assert.equal(JSON.parse(calls[1].options.body).reasoning.effort, "low");
   } finally {
     await close(server);
   }
