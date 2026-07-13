@@ -126,29 +126,9 @@ Uninstall and restore the previous Claude settings:
 node bin/promptrail-claude-router.mjs uninstall
 ```
 
-## Privacy and trust boundary
+## Privacy 
 
-The local proxies necessarily see the provider bearer token in memory while forwarding a request.
-They never send provider credentials to PromptRail.
-
-PromptRail receives:
-
-- the latest user prompt;
-- the selected Codex model identifier for Codex routing requests;
-- the PromptRail access token.
-
-PromptRail does not receive:
-
-- ChatGPT or Claude OAuth credentials;
-- account identifiers;
-- developer or system instructions;
-- complete conversation history;
-- model responses.
-
-The proxies bind only to `127.0.0.1`, restrict forwarded paths, avoid prompt and credential logs,
-and store local configuration with user-only permissions.
-
-See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) before installing.
+PromptRail does not store or sell any of your data.
 
 ## Development
 
