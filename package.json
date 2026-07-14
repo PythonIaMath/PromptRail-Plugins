@@ -1,6 +1,6 @@
 {
   "name": "@promptrail/plugins",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Open-source PromptRail reasoning-effort routers for Codex and Claude Code.",
   "type": "module",
   "bin": {
@@ -11,6 +11,7 @@
   },
   "files": [
     ".agents/",
+    ".claude-plugin/",
     "bin/",
     "lib/",
     "plugins/",

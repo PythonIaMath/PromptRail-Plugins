@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- Include the Claude Code marketplace manifest in the published npm package.
+
 ## 1.1.0
 
 ### Minor Changes
