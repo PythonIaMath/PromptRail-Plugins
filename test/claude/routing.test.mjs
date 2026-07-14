@@ -5,6 +5,7 @@ import {
   applyGrade,
   assertEffortSupported,
   effortForGrade,
+  extractLatestUserPrompt,
   supportedEffortsForModel,
   thinkingLevelForEffort,
 } from "../../plugins/promptrail-claude-router/src/routing.mjs";
@@ -26,6 +27,59 @@ test("formats the five visible thinking levels", () => {
   assert.deepEqual(
     ["low", "medium", "high", "xhigh", "max"].map(thinkingLevelForEffort),
     ["Low", "Medium", "High", "Extra High", "Max"],
+  );
+});
+
+test("extracts only direct text from the latest user-authored message", () => {
+  assert.equal(
+    extractLatestUserPrompt({
+      system: [{ type: "text", text: "private system context" }],
+      messages: [
+        { role: "user", content: "Earlier request." },
+        { role: "assistant", content: [{ type: "text", text: "Working." }] },
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", data: "private-image" } },
+            { type: "text", text: "Audit this authorization boundary." },
+            { type: "text", text: "Include every access path." },
+          ],
+        },
+      ],
+    }),
+    "Audit this authorization boundary.\nInclude every access path.",
+  );
+});
+
+test("skips tool-only user messages when recovering the submitted prompt", () => {
+  assert.equal(
+    extractLatestUserPrompt({
+      messages: [
+        { role: "user", content: "Repair the failing checkout flow." },
+        { role: "assistant", content: [{ type: "tool_use", id: "tool-1" }] },
+        {
+          role: "user",
+          content: [{
+            type: "tool_result",
+            tool_use_id: "tool-1",
+            content: "private tool output",
+          }],
+        },
+      ],
+    }),
+    "Repair the failing checkout flow.",
+  );
+});
+
+test("rejects fallback routing when no user-authored text is available", () => {
+  assert.throws(
+    () => extractLatestUserPrompt({
+      messages: [{
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-1", content: "private" }],
+      }],
+    }),
+    /does not contain user text/,
   );
 });
 

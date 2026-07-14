@@ -248,31 +248,59 @@ test("forwards token counting without requiring an effort route", async () => {
   }
 });
 
-test("stops Claude inference when the hook has not selected a route", async () => {
-  let calls = 0;
+test("grades and caches requests from sessions that started before hook installation", async () => {
+  const calls = [];
+  const logs = [];
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
-    fetchImpl: async () => {
-      calls += 1;
-      throw new Error("must not be called");
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (url === "https://grader.test/grade") {
+        return new Response(JSON.stringify({ grade: 4, latency_ms: 13 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("ok", { status: 200 });
     },
-    logger: { info() {} },
+    upstreamBaseUrl: "https://api.anthropic.test",
+    logger: { info(message) { logs.push(JSON.parse(message)); } },
   });
   const port = await listen(server);
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/v1/messages`, {
-      method: "POST",
-      headers: {
-        authorization: "Bearer claude-oauth-secret",
-        "anthropic-beta": "oauth-capability,effort-capability",
-        "content-type": "application/json",
-        "x-claude-code-session-id": "session-123",
-      },
-      body: JSON.stringify(messageBody()),
+    for (let index = 0; index < 2; index += 1) {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/messages`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer claude-oauth-secret",
+          "anthropic-beta": "oauth-capability,effort-capability",
+          "content-type": "application/json",
+          "x-claude-code-session-id": "session-123",
+        },
+        body: JSON.stringify(messageBody()),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("x-promptrail-grade"), "4");
+      assert.equal(response.headers.get("x-promptrail-effort"), "xhigh");
+    }
+
+    assert.equal(calls.length, 3);
+    assert.equal(calls[0].url, "https://grader.test/grade");
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      prompt: "Prove this queue is linearizable.",
     });
-    assert.equal(response.status, 409);
-    assert.equal((await response.json()).error, "promptrail_route_missing");
-    assert.equal(calls, 0);
+    assert.doesNotMatch(
+      calls[0].options.body,
+      /private system context|claude-oauth-secret|session-123/,
+    );
+    assert.deepEqual(
+      calls.slice(1).map(({ options }) => JSON.parse(options.body).output_config.effort),
+      ["xhigh", "xhigh"],
+    );
+    assert.deepEqual(logs.map(({ route_source }) => route_source), [
+      "proxy_request",
+      "proxy_cache",
+    ]);
   } finally {
     await close(server);
   }

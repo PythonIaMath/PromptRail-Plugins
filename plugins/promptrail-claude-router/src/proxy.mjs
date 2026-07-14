@@ -8,7 +8,7 @@ import {
   loadRouterConfig,
 } from "./config.mjs";
 import { gradePrompt } from "./grader-client.mjs";
-import { applyGrade, effortForGrade } from "./routing.mjs";
+import { applyGrade, effortForGrade, extractLatestUserPrompt } from "./routing.mjs";
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const ROUTE_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -160,28 +160,40 @@ export function createProxyServer({
 }) {
   const routeCache = new Map();
 
-  function cacheRoute(sessionId, route) {
+  function cacheRoute(sessionId, route, origin = "hook") {
     const now = Date.now();
     for (const [key, cached] of routeCache) {
       if (now - cached.createdAt > ROUTE_CACHE_TTL_MS) {
         routeCache.delete(key);
       }
     }
-    routeCache.set(sessionId, { ...route, createdAt: now });
+    routeCache.set(sessionId, { ...route, origin, createdAt: now });
   }
 
-  function requireCachedRoute(sessionId) {
+  function cachedRoute(sessionId) {
     const cached = routeCache.get(sessionId);
     if (!cached || Date.now() - cached.createdAt > ROUTE_CACHE_TTL_MS) {
       routeCache.delete(sessionId);
-      const error = new Error(
-        "Thinking level was not selected before the Claude request. Start a new Claude Code session so the PromptRail UserPromptSubmit hook is loaded.",
-      );
-      error.statusCode = 409;
-      error.code = "promptrail_route_missing";
-      throw error;
+      return null;
     }
     return cached;
+  }
+
+  async function selectRoute(sessionId, body) {
+    const cached = cachedRoute(sessionId);
+    if (cached) {
+      return { ...cached, source: `${cached.origin}_cache` };
+    }
+    const prompt = extractLatestUserPrompt(body);
+    const graded = await gradePrompt({
+      graderUrl: config.graderUrl,
+      routerToken: config.routerToken,
+      prompt,
+      fetchImpl,
+    });
+    const route = { ...graded, effort: effortForGrade(graded.grade) };
+    cacheRoute(sessionId, route, "proxy");
+    return { ...route, source: "proxy_request" };
   }
 
   return http.createServer(async (request, response) => {
@@ -227,8 +239,9 @@ export function createProxyServer({
           error.code = "claude_session_id_required";
           throw error;
         }
-        const graded = requireCachedRoute(sessionId);
-        const applied = applyGrade(JSON.parse(bodyText), graded.grade);
+        const requestBody = JSON.parse(bodyText);
+        const graded = await selectRoute(sessionId, requestBody);
+        const applied = applyGrade(requestBody, graded.grade);
         bodyText = JSON.stringify(applied.body);
         route = { ...graded, effort: applied.effort };
         logger.info?.(
@@ -236,6 +249,7 @@ export function createProxyServer({
             event: "promptrail_claude_route",
             grade: route.grade,
             effort: route.effort,
+            route_source: graded.source,
             grader_latency_ms: route.latencyMs,
           }),
         );

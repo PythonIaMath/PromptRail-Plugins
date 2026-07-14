@@ -18,6 +18,37 @@ function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function textFromUserContent(content) {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .filter((block) => isObject(block) && block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function extractLatestUserPrompt(body) {
+  if (!isObject(body) || !Array.isArray(body.messages)) {
+    throw new TypeError("Anthropic Messages request must include a messages array.");
+  }
+  for (let index = body.messages.length - 1; index >= 0; index -= 1) {
+    const message = body.messages[index];
+    if (!isObject(message) || message.role !== "user") {
+      continue;
+    }
+    const prompt = textFromUserContent(message.content);
+    if (prompt) {
+      return prompt;
+    }
+  }
+  throw new TypeError("Anthropic Messages request does not contain user text for PromptRail routing.");
+}
+
 export function supportedEffortsForModel(model) {
   const modelId = String(model || "").toLowerCase();
   if (
