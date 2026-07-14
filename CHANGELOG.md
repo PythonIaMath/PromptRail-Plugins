@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+### Patch Changes
+
+- 34ebdb2: Keep Claude Code sessions that were already running during installation working by grading their latest user prompt directly when no hook-selected route is cached.
+
 ## 1.1.1
 
 ### Patch Changes
