@@ -1,6 +1,6 @@
 {
   "name": "@promptrail/plugins",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "Open-source PromptRail reasoning-effort routers for Codex and Claude Code.",
   "type": "module",
   "bin": {
@@ -22,6 +22,9 @@
     "VERSION"
   ],
   "scripts": {
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish",
     "test": "node --test",
     "test:codex": "node --test test/codex",
     "test:claude": "node --test test/claude",
@@ -46,5 +49,8 @@
     "reasoning",
     "effort",
     "routing"
-  ]
+  ],
+  "devDependencies": {
+    "@changesets/cli": "^2.31.0"
+  }
 }

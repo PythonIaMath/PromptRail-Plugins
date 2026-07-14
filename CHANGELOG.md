@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- Automate npm releases, package versioning, and changelog updates with Changesets.
+
 All notable changes to PromptRail Plugins are documented here.
 
 ## [0.1.0.0] - 2026-07-10
