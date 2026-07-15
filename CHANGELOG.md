@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1
+
+### Patch Changes
+
+- 7233cb6: Add the PromptRail plugins page link to the published Codex and Claude plugin descriptions.
+
 ## 1.2.0
 
 ### Minor Changes
