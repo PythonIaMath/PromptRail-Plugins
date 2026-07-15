@@ -8,7 +8,13 @@ import {
   loadRouterConfig,
 } from "./config.mjs";
 import { gradePrompt } from "./grader-client.mjs";
-import { applyGrade, effortForGrade, extractLatestUserPrompt } from "./routing.mjs";
+import {
+  applyGrade,
+  effortForGrade,
+  extractLatestUserPrompt,
+  extractPreviousTurnContext,
+  normalizeGradeForPrompt,
+} from "./routing.mjs";
 
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -154,8 +160,9 @@ export function createProxyServer({
     return cached;
   }
 
-  async function selectRoute(prompt, model) {
-    const cached = cachedRoute(prompt, model);
+  async function selectRoute(prompt, model, context = {}) {
+    const hasContext = Boolean(context.previousUserPrompt || context.previousAssistantSummary);
+    const cached = hasContext ? null : cachedRoute(prompt, model);
     if (cached) {
       return { ...cached, source: "hook_cache" };
     }
@@ -164,9 +171,11 @@ export function createProxyServer({
       routerToken: config.routerToken,
       prompt,
       model,
+      ...context,
       fetchImpl,
     });
-    const route = { ...graded, effort: effortForGrade(graded.grade) };
+    const grade = normalizeGradeForPrompt(graded.grade, prompt);
+    const route = { ...graded, grade, effort: effortForGrade(grade) };
     cacheRoute(prompt, model, route);
     return { ...route, source: "proxy_request" };
   }
@@ -192,7 +201,8 @@ export function createProxyServer({
           model,
           fetchImpl,
         });
-        const route = { ...graded, effort: effortForGrade(graded.grade) };
+        const grade = normalizeGradeForPrompt(graded.grade, prompt);
+        const route = { ...graded, grade, effort: effortForGrade(grade) };
         cacheRoute(prompt, model, route);
         jsonResponse(response, 200, route);
         return;
@@ -207,7 +217,8 @@ export function createProxyServer({
       if (request.method === "POST" && request.url === "/responses") {
         const requestBody = JSON.parse(bodyText);
         const prompt = extractLatestUserPrompt(requestBody);
-        const graded = await selectRoute(prompt, requestBody.model);
+        const context = extractPreviousTurnContext(requestBody);
+        const graded = await selectRoute(prompt, requestBody.model, context);
         const applied = applyGrade(requestBody, graded.grade);
         bodyText = JSON.stringify(applied.body);
         route = { ...graded, effort: applied.effort };
