@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- 9e5bc09: Improve Codex effort selection by reserving `none` for genuinely trivial prompts and providing ArchRouter with the previous user prompt and assistant reasoning summary when available.
+
 ## 1.1.2
 
 ### Patch Changes
