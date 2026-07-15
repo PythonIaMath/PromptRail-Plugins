@@ -5,6 +5,9 @@ import {
   applyGrade,
   effortForGrade,
   extractLatestUserPrompt,
+  extractPreviousTurnContext,
+  isEligibleForNone,
+  normalizeGradeForPrompt,
   thinkingLevelForEffort,
 } from "../../plugins/promptrail-codex-router/src/routing.mjs";
 import { buildModelCatalog } from "../../plugins/promptrail-codex-router/src/config.mjs";
@@ -19,6 +22,31 @@ test("maps all six grades to OpenAI reasoning efforts", () => {
 test("rejects grades outside the six-grade contract", () => {
   assert.throws(() => effortForGrade(7), /integer grade from 1 through 6/);
   assert.throws(() => effortForGrade(2.5), /integer grade from 1 through 6/);
+});
+
+test("reserves none for short self-contained trivial prompts", () => {
+  for (const prompt of ["Hi", "Thanks!", "What is 2 + 2?", "Say hello."]) {
+    assert.equal(isEligibleForNone(prompt), true, prompt);
+    assert.equal(normalizeGradeForPrompt(1, prompt), 1, prompt);
+  }
+
+  for (const prompt of [
+    "Fix the login bug",
+    "Explain why this code fails",
+    "Review src/router.mjs",
+    "Run the tests",
+    "Search for the latest React release",
+    "Design a lock-free queue.",
+    "Summarize this implementation and identify any concurrency risks.",
+  ]) {
+    assert.equal(isEligibleForNone(prompt), false, prompt);
+    assert.equal(normalizeGradeForPrompt(1, prompt), 2, prompt);
+  }
+});
+
+test("does not alter grades above none", () => {
+  assert.equal(normalizeGradeForPrompt(2, "Hi"), 2);
+  assert.equal(normalizeGradeForPrompt(6, "Hi"), 6);
 });
 
 test("formats the six visible thinking levels", () => {
@@ -69,6 +97,37 @@ test("ignores Codex image envelope text when extracting an attached-image prompt
     ],
   });
   assert.equal(prompt, "[Image #1] fix this display issue in dark mode");
+});
+
+test("extracts the previous user prompt and last assistant summary", () => {
+  assert.deepEqual(
+    extractPreviousTurnContext({
+      input: [
+        { role: "user", content: [{ type: "input_text", text: "Fix the login bug." }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "output_text", text: "Long final answer is not sent." },
+            { type: "summary_text", text: "Found a stale session cookie." },
+          ],
+        },
+        { role: "user", content: [{ type: "input_text", text: "Do it." }] },
+      ],
+    }),
+    {
+      previousUserPrompt: "Fix the login bug.",
+      previousAssistantSummary: "Found a stale session cookie.",
+    },
+  );
+});
+
+test("omits prior context when there is no earlier user turn", () => {
+  assert.deepEqual(
+    extractPreviousTurnContext({
+      input: [{ role: "user", content: [{ type: "input_text", text: "First turn" }] }],
+    }),
+    {},
+  );
 });
 
 test("applies the selected effort without deleting reasoning summary settings", () => {

@@ -182,6 +182,152 @@ test("matches a cached route when Codex wraps an attached image around the promp
   }
 });
 
+test("regrades with the previous user prompt and assistant summary", async () => {
+  const graderBodies = [];
+  const server = createProxyServer({
+    config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
+    fetchImpl: async (url, options) => {
+      if (url === "https://grader.test/grade") {
+        graderBodies.push(JSON.parse(options.body));
+        return new Response(JSON.stringify({ grade: graderBodies.length === 1 ? 1 : 4 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("ok", { status: 200 });
+    },
+    upstreamBaseUrl: "https://chatgpt.test/backend-api/codex",
+    logger: { info() {} },
+  });
+  const port = await listen(server);
+  try {
+    const routeResponse = await fetch(`http://127.0.0.1:${port}/route`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer router-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Do it.", model: "gpt-5.6-sol" }),
+    });
+    assert.equal(routeResponse.status, 200);
+
+    const response = await fetch(`http://127.0.0.1:${port}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer subscription-secret",
+        "chatgpt-account-id": "account-123",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-5.6-sol",
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Fix the login bug." }] },
+          {
+            role: "assistant",
+            content: [
+              { type: "output_text", text: "Full response must stay local." },
+              { type: "summary_text", text: "Found a stale session cookie." },
+            ],
+          },
+          { role: "user", content: [{ type: "input_text", text: "Do it." }] },
+        ],
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-promptrail-grade"), "4");
+    assert.equal(response.headers.get("x-promptrail-effort"), "high");
+    assert.equal(graderBodies.length, 2);
+    assert.deepEqual(graderBodies[1], {
+      prompt: "Do it.",
+      model: "gpt-5.6-sol",
+      previous_user_prompt: "Fix the login bug.",
+      previous_assistant_summary: "Found a stale session cookie.",
+    });
+    assert.doesNotMatch(JSON.stringify(graderBodies[1]), /Full response must stay local/);
+  } finally {
+    await close(server);
+  }
+});
+
+test("promotes a non-trivial grader grade 1 to low in hook and model routing", async () => {
+  const upstreamBodies = [];
+  const server = createProxyServer({
+    config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
+    fetchImpl: async (url, options) => {
+      if (url === "https://grader.test/grade") {
+        return new Response(JSON.stringify({ grade: 1 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      upstreamBodies.push(JSON.parse(options.body));
+      return new Response("ok", { status: 200 });
+    },
+    upstreamBaseUrl: "https://chatgpt.test/backend-api/codex",
+    logger: { info() {} },
+  });
+  const port = await listen(server);
+  try {
+    const routeResponse = await fetch(`http://127.0.0.1:${port}/route`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer router-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Fix the login bug", model: "gpt-5.6-sol" }),
+    });
+    assert.equal(routeResponse.status, 200);
+    const route = await routeResponse.json();
+    assert.equal(route.grade, 2);
+    assert.equal(route.effort, "low");
+
+    const response = await fetch(`http://127.0.0.1:${port}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer subscription-secret",
+        "chatgpt-account-id": "account-123",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-5.6-sol",
+        input: [{ role: "user", content: [{ type: "input_text", text: "Fix the login bug" }] }],
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-promptrail-grade"), "2");
+    assert.equal(response.headers.get("x-promptrail-effort"), "low");
+    assert.equal(upstreamBodies[0].reasoning.effort, "low");
+  } finally {
+    await close(server);
+  }
+});
+
+test("keeps grade 1 for a genuinely trivial prompt", async () => {
+  const server = createProxyServer({
+    config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
+    fetchImpl: async () => new Response(JSON.stringify({ grade: 1 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+    logger: { info() {} },
+  });
+  const port = await listen(server);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/route`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer router-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Thanks!", model: "gpt-5.6-sol" }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).effort, "none");
+  } finally {
+    await close(server);
+  }
+});
+
 test("does not call OpenAI when the grader violates the six-grade contract", async () => {
   let calls = 0;
   const server = createProxyServer({

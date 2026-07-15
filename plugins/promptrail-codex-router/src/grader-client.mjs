@@ -1,4 +1,19 @@
-export async function gradePrompt({ graderUrl, routerToken, prompt, model, fetchImpl = fetch }) {
+export async function gradePrompt({
+  graderUrl,
+  routerToken,
+  prompt,
+  model,
+  previousUserPrompt,
+  previousAssistantSummary,
+  fetchImpl = fetch,
+}) {
+  const body = { prompt, model };
+  if (previousUserPrompt) {
+    body.previous_user_prompt = previousUserPrompt;
+  }
+  if (previousAssistantSummary) {
+    body.previous_assistant_summary = previousAssistantSummary;
+  }
   const response = await fetchImpl(graderUrl, {
     method: "POST",
     headers: {
@@ -6,7 +21,7 @@ export async function gradePrompt({ graderUrl, routerToken, prompt, model, fetch
       "content-type": "application/json",
       accept: "application/json",
     },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const detail = (await response.text()).slice(0, 500);

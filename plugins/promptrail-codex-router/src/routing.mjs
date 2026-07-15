@@ -24,6 +24,11 @@ function isCodexImageEnvelope(text) {
   return text === "</image>" || /^<image(?:\s[^>]*)?>$/.test(text);
 }
 
+const NONE_MAX_CHARACTERS = 80;
+const NONE_MAX_WORDS = 12;
+const NON_TRIVIAL_PROMPT_PATTERN =
+  /(?:```|https?:\/\/|(?:^|[\s`"'(])(?:\.{0,2}\/)?[\w.-]+\/[\w./-]+|[$>#]\s|(?:^|\s)--[\w-]+|[{}[\]();]|(?:\b(?:add|analy[sz]e|build|change|check|compare|configure|create|debug|deploy|design|edit|explain|find|fix|implement|install|investigate|look up|modify|optimi[sz]e|plan|refactor|research|review|route|run|search|summari[sz]e|test|update|verify|why)\b))/i;
+
 function textFromContent(content) {
   if (typeof content === "string") {
     return content.trim();
@@ -35,6 +40,18 @@ function textFromContent(content) {
     .filter((part) => isObject(part) && (part.type === "input_text" || part.type === "text"))
     .map((part) => String(part.text || "").trim())
     .filter((text) => text && !isCodexImageEnvelope(text))
+    .join("\n")
+    .trim();
+}
+
+function summaryFromContent(content) {
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .filter((part) => isObject(part) && part.type === "summary_text")
+    .map((part) => String(part.text || "").trim())
+    .filter(Boolean)
     .join("\n")
     .trim();
 }
@@ -61,6 +78,73 @@ export function extractLatestUserPrompt(body) {
     }
   }
   throw new TypeError("Responses request does not contain a non-empty user prompt.");
+}
+
+export function extractPreviousTurnContext(body) {
+  if (!isObject(body) || !Array.isArray(body.input)) {
+    return {};
+  }
+
+  let currentUserIndex = -1;
+  for (let index = body.input.length - 1; index >= 0; index -= 1) {
+    const item = body.input[index];
+    if (isObject(item) && item.role === "user" && textFromContent(item.content)) {
+      currentUserIndex = index;
+      break;
+    }
+  }
+  if (currentUserIndex < 0) {
+    return {};
+  }
+
+  let previousUserIndex = -1;
+  let previousUserPrompt = "";
+  for (let index = currentUserIndex - 1; index >= 0; index -= 1) {
+    const item = body.input[index];
+    if (!isObject(item) || item.role !== "user") {
+      continue;
+    }
+    const text = textFromContent(item.content);
+    if (text) {
+      previousUserIndex = index;
+      previousUserPrompt = text;
+      break;
+    }
+  }
+  if (previousUserIndex < 0) {
+    return {};
+  }
+
+  let previousAssistantSummary = "";
+  for (let index = currentUserIndex - 1; index > previousUserIndex; index -= 1) {
+    const item = body.input[index];
+    if (!isObject(item) || item.role !== "assistant") {
+      continue;
+    }
+    previousAssistantSummary = summaryFromContent(item.content);
+    if (previousAssistantSummary) {
+      break;
+    }
+  }
+
+  return {
+    previousUserPrompt,
+    ...(previousAssistantSummary ? { previousAssistantSummary } : {}),
+  };
+}
+
+export function isEligibleForNone(prompt) {
+  const text = String(prompt || "").trim();
+  if (!text || text.length > NONE_MAX_CHARACTERS || text.includes("\n")) {
+    return false;
+  }
+  const words = text.match(/\b[\p{L}\p{N}'-]+\b/gu) || [];
+  return words.length <= NONE_MAX_WORDS && !NON_TRIVIAL_PROMPT_PATTERN.test(text);
+}
+
+export function normalizeGradeForPrompt(grade, prompt) {
+  effortForGrade(grade);
+  return grade === 1 && !isEligibleForNone(prompt) ? 2 : grade;
 }
 
 export function effortForGrade(grade) {
