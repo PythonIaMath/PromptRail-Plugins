@@ -28,8 +28,9 @@ Install the Codex router with one command:
 npx @promptrail/plugins install codex
 ```
 
-The installer asks for the PromptRail access token without echoing it. For automated installs,
-provide the token through the environment:
+The installer asks for the PromptRail access token without echoing it. Get your access token at
+[promptrail.ai/plugins](https://www.promptrail.ai/plugins). For automated installs, provide the
+token through the environment:
 
 ```bash
 PROMPTRAIL_ACCESS_TOKEN="..." npx @promptrail/plugins install codex
