@@ -1,7 +1,7 @@
 {
   "name": "promptrail-claude-router",
   "version": "0.1.0",
-  "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing.",
+  "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing. Learn more at https://www.promptrail.ai/plugins",
   "author": {
     "name": "PromptRail",
     "url": "https://promptrail.ai"
