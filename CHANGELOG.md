@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2
+
+### Patch Changes
+
+- 20b7783: Link the installer documentation directly to the PromptRail access-token page.
+
 ## 1.2.1
 
 ### Patch Changes
