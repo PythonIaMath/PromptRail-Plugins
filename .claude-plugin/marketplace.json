@@ -5,13 +5,13 @@
     "url": "https://promptrail.ai"
   },
   "metadata": {
-    "description": "PromptRail plugins for automatic AI reasoning-effort routing"
+    "description": "PromptRail plugins for automatic AI reasoning-effort routing. Learn more at https://www.promptrail.ai/plugins"
   },
   "plugins": [
     {
       "name": "promptrail-claude-router",
       "source": "./plugins/promptrail-claude-router",
-      "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing",
+      "description": "Automatically selects one of five Claude Code effort levels while preserving claude.ai subscription billing. Learn more at https://www.promptrail.ai/plugins",
       "category": "productivity",
       "homepage": "https://promptrail.ai",
       "repository": "https://github.com/PythonIaMath/PromptRail-Plugins",
