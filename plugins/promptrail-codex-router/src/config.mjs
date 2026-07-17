@@ -20,15 +20,37 @@ export function routerModelCatalogPath() {
 }
 
 export function buildModelCatalog(bundledCatalog, overrideCatalog) {
-  const template = bundledCatalog?.models?.find((model) => model.slug === "gpt-5.5");
-  const override = overrideCatalog?.models?.[0];
-  if (!template || typeof template.base_instructions !== "string" || !template.base_instructions) {
-    throw new Error("Bundled Codex catalog does not contain a usable gpt-5.5 template.");
+  if (!Array.isArray(bundledCatalog?.models) || bundledCatalog.models.length === 0) {
+    throw new Error("Bundled Codex catalog does not contain any models.");
   }
-  if (!override || override.slug !== "gpt-5.6-sol") {
+  const overrides = new Map(
+    (overrideCatalog?.models || []).map((model) => [model?.slug, model]),
+  );
+  if (!overrides.has("gpt-5.6-sol")) {
     throw new Error("PromptRail model catalog override must define gpt-5.6-sol.");
   }
-  return { models: [{ ...template, ...override, base_instructions: template.base_instructions }] };
+
+  const matchedOverrides = new Set();
+  const models = bundledCatalog.models.map((model) => {
+    const override = overrides.get(model?.slug);
+    if (!override) {
+      return model;
+    }
+    matchedOverrides.add(model.slug);
+    return {
+      ...model,
+      ...override,
+      base_instructions: model.base_instructions,
+    };
+  });
+
+  for (const slug of overrides.keys()) {
+    if (!matchedOverrides.has(slug)) {
+      throw new Error(`Bundled Codex catalog does not contain PromptRail model ${slug}.`);
+    }
+  }
+
+  return { ...bundledCatalog, models };
 }
 
 export async function installModelCatalog(

@@ -27,6 +27,15 @@ function requestBody() {
   };
 }
 
+function routerPayload(thinkingGrade, model = "gpt-5.6-terra", latency = 0) {
+  return {
+    thinking_grade: thinkingGrade,
+    model,
+    difficulty: model.endsWith("luna") ? 1 : model.endsWith("sol") ? 3 : 2,
+    latency_ms: { total: latency },
+  };
+}
+
 test("rejects API-key-style requests before calling the grader or upstream", async () => {
   const calls = [];
   const server = createProxyServer({
@@ -61,7 +70,7 @@ test("sends only the prompt to the grader and forwards the routed subscription r
     calls.push({ url, options });
     if (url === "https://grader.test/grade") {
       return new Response(
-        JSON.stringify({ grade: 5, latency_ms: 12 }),
+        JSON.stringify(routerPayload(5, "gpt-5.6-sol", 12)),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
@@ -104,16 +113,19 @@ test("sends only the prompt to the grader and forwards the routed subscription r
     assert.equal(response.headers.get("x-promptrail-effort"), "xhigh");
     assert.match(await response.text(), /response.completed/);
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     const graderCall = calls[0];
     assert.equal(graderCall.options.headers.authorization, "Bearer router-secret");
     assert.deepEqual(JSON.parse(graderCall.options.body), {
+      client: "codex",
       prompt: "Design a lock-free queue.",
-      model: "gpt-5.6-sol",
+      current_model: "gpt-5.6-sol",
+      previous_user_prompt: "No previous user prompt; this is the first turn.",
+      previous_assistant_summary: "No previous assistant response; this is the first turn.",
     });
     assert.doesNotMatch(graderCall.options.body, /subscription-secret|account-123|developer context/);
 
-    const upstreamCall = calls[1];
+    const upstreamCall = calls[2];
     assert.equal(upstreamCall.options.headers.authorization, "Bearer subscription-secret");
     assert.equal(upstreamCall.options.headers["chatgpt-account-id"], "account-123");
     assert.equal(JSON.parse(upstreamCall.options.body).reasoning.effort, "xhigh");
@@ -122,14 +134,16 @@ test("sends only the prompt to the grader and forwards the routed subscription r
   }
 });
 
-test("matches a cached route when Codex wraps an attached image around the prompt", async () => {
+test("routes an attached-image prompt independently on every request", async () => {
   const prompt = "[Image #1] fix this display issue in dark mode";
   const upstreamBodies = [];
+  let graderCalls = 0;
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
     fetchImpl: async (url, options) => {
       if (url === "https://grader.test/grade") {
-        return new Response(JSON.stringify({ grade: 2 }), {
+        graderCalls += 1;
+        return new Response(JSON.stringify(routerPayload(2)), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -151,6 +165,7 @@ test("matches a cached route when Codex wraps an attached image around the promp
       body: JSON.stringify({ prompt, model: "gpt-5.6-sol" }),
     });
     assert.equal(routeResponse.status, 200);
+    assert.equal((await routeResponse.json()).effort, "low");
 
     const response = await fetch(`http://127.0.0.1:${port}/responses`, {
       method: "POST",
@@ -177,6 +192,7 @@ test("matches a cached route when Codex wraps an attached image around the promp
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("x-promptrail-effort"), "low");
     assert.equal(upstreamBodies[0].reasoning.effort, "low");
+    assert.equal(graderCalls, 2);
   } finally {
     await close(server);
   }
@@ -189,7 +205,7 @@ test("regrades with the previous user prompt and assistant summary", async () =>
     fetchImpl: async (url, options) => {
       if (url === "https://grader.test/grade") {
         graderBodies.push(JSON.parse(options.body));
-        return new Response(JSON.stringify({ grade: graderBodies.length === 1 ? 1 : 4 }), {
+        return new Response(JSON.stringify(routerPayload(graderBodies.length === 1 ? 1 : 4)), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -238,12 +254,71 @@ test("regrades with the previous user prompt and assistant summary", async () =>
     assert.equal(response.headers.get("x-promptrail-effort"), "high");
     assert.equal(graderBodies.length, 2);
     assert.deepEqual(graderBodies[1], {
+      client: "codex",
       prompt: "Do it.",
-      model: "gpt-5.6-sol",
+      current_model: "gpt-5.6-sol",
       previous_user_prompt: "Fix the login bug.",
       previous_assistant_summary: "Found a stale session cookie.",
     });
     assert.doesNotMatch(JSON.stringify(graderBodies[1]), /Full response must stay local/);
+  } finally {
+    await close(server);
+  }
+});
+
+test("regrades with compact assistant output when no explicit summary exists", async () => {
+  let graderBody;
+  const server = createProxyServer({
+    config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
+    fetchImpl: async (url, options) => {
+      if (url === "https://grader.test/grade") {
+        graderBody = JSON.parse(options.body);
+        return new Response(JSON.stringify(routerPayload(3)), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("ok", { status: 200 });
+    },
+    upstreamBaseUrl: "https://chatgpt.test/backend-api/codex",
+    logger: { info() {} },
+  });
+  const port = await listen(server);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer subscription-secret",
+        "chatgpt-account-id": "account-123",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-5.6-sol",
+        input: [
+          { role: "user", content: [{ type: "input_text", text: "Inspect the queue." }] },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "output_text",
+                text: "  Found unsafe shared mutation.\n\nSynchronization is still missing.  ",
+              },
+            ],
+          },
+          { role: "user", content: [{ type: "input_text", text: "Fix it." }] },
+        ],
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(graderBody, {
+      client: "codex",
+      prompt: "Fix it.",
+      current_model: "gpt-5.6-sol",
+      previous_user_prompt: "Inspect the queue.",
+      previous_assistant_summary:
+        "Found unsafe shared mutation. Synchronization is still missing.",
+    });
   } finally {
     await close(server);
   }
@@ -255,7 +330,7 @@ test("promotes a non-trivial grader grade 1 to low in hook and model routing", a
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
     fetchImpl: async (url, options) => {
       if (url === "https://grader.test/grade") {
-        return new Response(JSON.stringify({ grade: 1 }), {
+        return new Response(JSON.stringify(routerPayload(1)), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -305,7 +380,7 @@ test("promotes a non-trivial grader grade 1 to low in hook and model routing", a
 test("keeps grade 1 for a genuinely trivial prompt", async () => {
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
-    fetchImpl: async () => new Response(JSON.stringify({ grade: 1 }), {
+    fetchImpl: async () => new Response(JSON.stringify(routerPayload(1, "gpt-5.6-luna")), {
       status: 200,
       headers: { "content-type": "application/json" },
     }),
@@ -334,7 +409,7 @@ test("does not call OpenAI when the grader violates the six-grade contract", asy
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
     fetchImpl: async () => {
       calls += 1;
-      return new Response(JSON.stringify({ grade: 7 }), {
+      return new Response(JSON.stringify(routerPayload(7)), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -366,7 +441,7 @@ test("grades Codex Desktop background responses that do not run UserPromptSubmit
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       if (url === "https://grader.test/grade") {
-        return new Response(JSON.stringify({ grade: 2, latency_ms: 9 }), {
+        return new Response(JSON.stringify(routerPayload(2, "gpt-5.6-terra", 9)), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -393,11 +468,15 @@ test("grades Codex Desktop background responses that do not run UserPromptSubmit
     assert.equal(calls.length, 2);
     assert.equal(calls[0].url, "https://grader.test/grade");
     assert.deepEqual(JSON.parse(calls[0].options.body), {
+      client: "codex",
       prompt: "Design a lock-free queue.",
-      model: "gpt-5.6-sol",
+      current_model: "gpt-5.6-sol",
+      previous_user_prompt: "No previous user prompt; this is the first turn.",
+      previous_assistant_summary: "No previous assistant response; this is the first turn.",
     });
     assert.equal(calls[1].url, "https://chatgpt.test/backend-api/codex/responses");
     assert.equal(JSON.parse(calls[1].options.body).reasoning.effort, "low");
+    assert.equal(JSON.parse(calls[1].options.body).model, "gpt-5.6-terra");
   } finally {
     await close(server);
   }

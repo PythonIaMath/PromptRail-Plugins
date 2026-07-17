@@ -7,13 +7,19 @@ export async function gradePrompt({
   previousAssistantSummary,
   fetchImpl = fetch,
 }) {
-  const body = { prompt, model };
-  if (previousUserPrompt) {
-    body.previous_user_prompt = previousUserPrompt;
+  if (!String(previousUserPrompt || "").trim()) {
+    throw new TypeError("previousUserPrompt is required.");
   }
-  if (previousAssistantSummary) {
-    body.previous_assistant_summary = previousAssistantSummary;
+  if (!String(previousAssistantSummary || "").trim()) {
+    throw new TypeError("previousAssistantSummary is required.");
   }
+  const body = {
+    client: "codex",
+    prompt,
+    current_model: model,
+    previous_user_prompt: previousUserPrompt,
+    previous_assistant_summary: previousAssistantSummary,
+  };
   const response = await fetchImpl(graderUrl, {
     method: "POST",
     headers: {
@@ -28,11 +34,20 @@ export async function gradePrompt({
     throw new Error(`PromptRail grader returned HTTP ${response.status}: ${detail}`);
   }
   const payload = await response.json();
-  if (!Number.isInteger(payload?.grade) || payload.grade < 1 || payload.grade > 6) {
-    throw new RangeError("PromptRail grader returned an invalid grade; expected an integer from 1 through 6.");
+  const grade = payload?.thinking_grade;
+  if (!Number.isInteger(grade) || grade < 1 || grade > 6) {
+    throw new RangeError(
+      "PromptRail router returned an invalid thinking_grade; expected an integer from 1 through 6.",
+    );
+  }
+  const selectedModel = String(payload?.model || "").trim();
+  if (!selectedModel) {
+    throw new TypeError("PromptRail router returned an empty model.");
   }
   return {
-    grade: payload.grade,
-    latencyMs: Number(payload.latency_ms || 0),
+    grade,
+    model: selectedModel,
+    difficulty: Number(payload.difficulty || 0),
+    latencyMs: Number(payload.latency_ms?.total || 0),
   };
 }

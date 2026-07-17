@@ -6,6 +6,7 @@ import {
   effortForGrade,
   extractLatestUserPrompt,
   extractPreviousTurnContext,
+  extractPreviousTurnContextFromTranscript,
   isEligibleForNone,
   normalizeGradeForPrompt,
   thinkingLevelForEffort,
@@ -121,12 +122,75 @@ test("extracts the previous user prompt and last assistant summary", () => {
   );
 });
 
-test("omits prior context when there is no earlier user turn", () => {
+test("uses a bounded prior assistant response when no explicit summary exists", () => {
+  const context = extractPreviousTurnContext({
+    input: [
+      { role: "user", content: [{ type: "input_text", text: "Investigate it." }] },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: `  Found the race condition.\n\n${"x".repeat(2_100)}  `,
+          },
+        ],
+      },
+      { role: "user", content: [{ type: "input_text", text: "Fix it." }] },
+    ],
+  });
+
+  assert.equal(context.previousUserPrompt, "Investigate it.");
+  assert.equal(context.previousAssistantSummary.length, 2_000);
+  assert.match(context.previousAssistantSummary, /^Found the race condition\. x+/);
+  assert.match(context.previousAssistantSummary, /x…$/);
+});
+
+test("supplies explicit context when there is no earlier user turn", () => {
   assert.deepEqual(
     extractPreviousTurnContext({
       input: [{ role: "user", content: [{ type: "input_text", text: "First turn" }] }],
     }),
-    {},
+    {
+      previousUserPrompt: "No previous user prompt; this is the first turn.",
+      previousAssistantSummary: "No previous assistant response; this is the first turn.",
+    },
+  );
+});
+
+test("extracts the previous turn from a Codex JSONL transcript", () => {
+  const transcript = [
+    JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Fix the race condition." }],
+      },
+    }),
+    JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Found unsafe shared mutation." }],
+      },
+    }),
+    JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Do it." }],
+      },
+    }),
+  ].join("\n");
+
+  assert.deepEqual(
+    extractPreviousTurnContextFromTranscript(transcript, "Do it."),
+    {
+      previousUserPrompt: "Fix the race condition.",
+      previousAssistantSummary: "Found unsafe shared mutation.",
+    },
   );
 });
 
@@ -139,21 +203,62 @@ test("applies the selected effort without deleting reasoning summary settings", 
   assert.equal(result.effort, "xhigh");
 });
 
-test("six-level catalog preserves the complete bundled Codex instructions", () => {
+test("six-level catalog preserves native models and extends matching entries", () => {
   const catalog = buildModelCatalog(
-    { models: [{ slug: "gpt-5.5", base_instructions: "full bundled instructions", priority: 7 }] },
+    {
+      refresh_interval: 300,
+      models: [
+        {
+          slug: "gpt-5.6-sol",
+          base_instructions: "sol instructions",
+          priority: 0,
+          supported_reasoning_levels: [{ effort: "low" }],
+        },
+        {
+          slug: "gpt-5.6-terra",
+          base_instructions: "terra instructions",
+          priority: 1,
+          supported_reasoning_levels: [{ effort: "max" }],
+        },
+        {
+          slug: "gpt-5.6-luna",
+          base_instructions: "luna instructions",
+          priority: 2,
+          supported_reasoning_levels: [{ effort: "high" }],
+        },
+      ],
+    },
     {
       models: [
         {
           slug: "gpt-5.6-sol",
           base_instructions: "untrusted override",
-          supported_reasoning_levels: [{ effort: "max" }],
+          supported_reasoning_levels: [{ effort: "none" }, { effort: "max" }],
         },
       ],
     },
   );
-  assert.equal(catalog.models[0].slug, "gpt-5.6-sol");
-  assert.equal(catalog.models[0].base_instructions, "full bundled instructions");
-  assert.equal(catalog.models[0].priority, 7);
-  assert.deepEqual(catalog.models[0].supported_reasoning_levels, [{ effort: "max" }]);
+  assert.equal(catalog.refresh_interval, 300);
+  assert.deepEqual(catalog.models.map(({ slug }) => slug), [
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+  ]);
+  assert.equal(catalog.models[0].base_instructions, "sol instructions");
+  assert.deepEqual(catalog.models[0].supported_reasoning_levels, [
+    { effort: "none" },
+    { effort: "max" },
+  ]);
+  assert.deepEqual(catalog.models[1].supported_reasoning_levels, [{ effort: "max" }]);
+  assert.deepEqual(catalog.models[2].supported_reasoning_levels, [{ effort: "high" }]);
+});
+
+test("catalog generation rejects an override for an unavailable native model", () => {
+  assert.throws(
+    () => buildModelCatalog(
+      { models: [{ slug: "gpt-5.5", base_instructions: "instructions" }] },
+      { models: [{ slug: "gpt-5.6-sol" }] },
+    ),
+    /does not contain PromptRail model gpt-5\.6-sol/,
+  );
 });

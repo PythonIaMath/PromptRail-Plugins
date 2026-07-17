@@ -26,6 +26,10 @@ function isCodexImageEnvelope(text) {
 
 const NONE_MAX_CHARACTERS = 80;
 const NONE_MAX_WORDS = 12;
+const MAX_ASSISTANT_CONTEXT_CHARACTERS = 2_000;
+export const FIRST_TURN_USER_CONTEXT = "No previous user prompt; this is the first turn.";
+export const FIRST_TURN_ASSISTANT_CONTEXT =
+  "No previous assistant response; this is the first turn.";
 const NON_TRIVIAL_PROMPT_PATTERN =
   /(?:```|https?:\/\/|(?:^|[\s`"'(])(?:\.{0,2}\/)?[\w.-]+\/[\w./-]+|[$>#]\s|(?:^|\s)--[\w-]+|[{}[\]();]|(?:\b(?:add|analy[sz]e|build|change|check|compare|configure|create|debug|deploy|design|edit|explain|find|fix|implement|install|investigate|look up|modify|optimi[sz]e|plan|refactor|research|review|route|run|search|summari[sz]e|test|update|verify|why)\b))/i;
 
@@ -56,6 +60,137 @@ function summaryFromContent(content) {
     .trim();
 }
 
+function compactAssistantText(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_ASSISTANT_CONTEXT_CHARACTERS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_ASSISTANT_CONTEXT_CHARACTERS - 1).trimEnd()}…`;
+}
+
+function assistantContextFromContent(content) {
+  const explicitSummary = summaryFromContent(content);
+  if (explicitSummary) {
+    return compactAssistantText(explicitSummary);
+  }
+  if (typeof content === "string") {
+    return compactAssistantText(content);
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return compactAssistantText(
+    content
+      .filter(
+        (part) =>
+          isObject(part) &&
+          (part.type === "output_text" || part.type === "text"),
+      )
+      .map((part) => String(part.text || "").trim())
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
+function transcriptItem(record) {
+  if (!isObject(record)) {
+    return null;
+  }
+  if (record.type === "response_item" && isObject(record.payload)) {
+    return record.payload;
+  }
+  if (isObject(record.payload) && isObject(record.payload.payload)) {
+    return record.payload.payload;
+  }
+  return null;
+}
+
+function transcriptText(content) {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return content
+    .filter(
+      (part) =>
+        isObject(part) &&
+        (part.type === "input_text" ||
+          part.type === "text" ||
+          part.type === "output_text" ||
+          part.type === "summary_text"),
+    )
+    .map((part) => String(part.text || "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+export function extractPreviousTurnContextFromTranscript(
+  transcriptJsonl,
+  currentPrompt,
+) {
+  const records = [];
+  for (const line of String(transcriptJsonl || "").split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const item = transcriptItem(JSON.parse(line));
+      if (item?.role === "user" || item?.role === "assistant") {
+        const text =
+          item.role === "assistant"
+            ? assistantContextFromContent(item.content)
+            : transcriptText(item.content);
+        if (text) {
+          records.push({ role: item.role, text });
+        }
+      }
+    } catch {
+      // Ignore non-JSON or malformed transcript lines.
+    }
+  }
+
+  const current = String(currentPrompt || "").trim();
+  let currentIndex = records.length;
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    if (records[index].role === "user" && records[index].text === current) {
+      currentIndex = index;
+      break;
+    }
+  }
+
+  let previousUserIndex = -1;
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    if (records[index].role === "user") {
+      previousUserIndex = index;
+      break;
+    }
+  }
+  if (previousUserIndex < 0) {
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
+  }
+
+  let previousAssistantSummary = "";
+  for (let index = currentIndex - 1; index > previousUserIndex; index -= 1) {
+    if (records[index].role === "assistant") {
+      previousAssistantSummary = records[index].text;
+      if (previousAssistantSummary) {
+        break;
+      }
+    }
+  }
+  return {
+    previousUserPrompt: records[previousUserIndex].text,
+    previousAssistantSummary:
+      previousAssistantSummary || "The previous assistant response did not include a summary.",
+  };
+}
+
 export function extractLatestUserPrompt(body) {
   if (!isObject(body)) {
     throw new TypeError("Responses request body must be a JSON object.");
@@ -82,7 +217,10 @@ export function extractLatestUserPrompt(body) {
 
 export function extractPreviousTurnContext(body) {
   if (!isObject(body) || !Array.isArray(body.input)) {
-    return {};
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
   }
 
   let currentUserIndex = -1;
@@ -94,7 +232,10 @@ export function extractPreviousTurnContext(body) {
     }
   }
   if (currentUserIndex < 0) {
-    return {};
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
   }
 
   let previousUserIndex = -1;
@@ -112,7 +253,10 @@ export function extractPreviousTurnContext(body) {
     }
   }
   if (previousUserIndex < 0) {
-    return {};
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
   }
 
   let previousAssistantSummary = "";
@@ -121,7 +265,7 @@ export function extractPreviousTurnContext(body) {
     if (!isObject(item) || item.role !== "assistant") {
       continue;
     }
-    previousAssistantSummary = summaryFromContent(item.content);
+    previousAssistantSummary = assistantContextFromContent(item.content);
     if (previousAssistantSummary) {
       break;
     }
@@ -129,7 +273,8 @@ export function extractPreviousTurnContext(body) {
 
   return {
     previousUserPrompt,
-    ...(previousAssistantSummary ? { previousAssistantSummary } : {}),
+    previousAssistantSummary:
+      previousAssistantSummary || "The previous assistant response did not include a summary.",
   };
 }
 
@@ -177,5 +322,21 @@ export function applyGrade(body, grade) {
       },
     },
     effort,
+  };
+}
+
+export function applyRoute(body, route) {
+  const applied = applyGrade(body, route.grade);
+  const model = String(route.model || "").trim();
+  if (!model) {
+    throw new TypeError("PromptRail route must include a model.");
+  }
+  return {
+    body: {
+      ...applied.body,
+      model,
+    },
+    effort: applied.effort,
+    model,
   };
 }

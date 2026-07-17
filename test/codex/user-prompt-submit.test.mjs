@@ -32,7 +32,7 @@ async function readStream(stream) {
   return output;
 }
 
-test("displays only the selected thinking level for UserPromptSubmit", async () => {
+test("exposes the selected route as hook context without an assistant instruction", async () => {
   let routeRequest;
   const server = http.createServer(async (request, response) => {
     let body = "";
@@ -43,7 +43,11 @@ test("displays only the selected thinking level for UserPromptSubmit", async () 
       authorization: request.headers.authorization,
       body: JSON.parse(body),
     };
-    const payload = JSON.stringify({ grade: 3, effort: "medium" });
+    const payload = JSON.stringify({
+      grade: 3,
+      effort: "medium",
+      model: "gpt-5.6-terra",
+    });
     response.writeHead(200, {
       "content-type": "application/json",
       "content-length": Buffer.byteLength(payload),
@@ -84,11 +88,9 @@ test("displays only the selected thinking level for UserPromptSubmit", async () 
     assert.equal(exitCode, 0);
     assert.equal(stderr, "");
     assert.deepEqual(JSON.parse(stdout), {
-      systemMessage: "Thinking Level: Medium",
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext:
-          'Begin your next user-visible message with exactly "Thinking Level: Medium" on its own line, before any other text. Do not add other wording to that line.',
+        additionalContext: "PromptRail: gpt-5.6-terra | medium",
       },
     });
     assert.deepEqual(routeRequest, {
@@ -96,7 +98,100 @@ test("displays only the selected thinking level for UserPromptSubmit", async () 
       body: {
         prompt: "Review this queue design.",
         model: "gpt-5.6-sol",
+        previous_user_prompt: "No previous user prompt; this is the first turn.",
+        previous_assistant_summary: "No previous assistant response; this is the first turn.",
       },
+    });
+  } finally {
+    await close(server);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("uses the previous turn from the Codex transcript for the visible route", async () => {
+  let routeRequest;
+  const server = http.createServer(async (request, response) => {
+    let body = "";
+    for await (const chunk of request) {
+      body += chunk;
+    }
+    routeRequest = JSON.parse(body);
+    const payload = JSON.stringify({
+      grade: 5,
+      effort: "xhigh",
+      model: "gpt-5.6-sol",
+    });
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "content-length": Buffer.byteLength(payload),
+    });
+    response.end(payload);
+  });
+  const port = await listen(server);
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-hook-transcript-"));
+  const configPath = join(directory, "config.json");
+  const transcriptPath = join(directory, "session.jsonl");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      graderUrl: "https://grader.test/grade",
+      routerToken: "router-secret",
+      host: "127.0.0.1",
+      port,
+    }),
+  );
+  await writeFile(
+    transcriptPath,
+    [
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "Fix the race condition in the cache worker." }],
+        },
+      }),
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Found unsafe shared mutation; implement synchronization and test it." }],
+        },
+      }),
+    ].join("\n"),
+  );
+
+  try {
+    const child = spawn(process.execPath, [HOOK_SCRIPT], {
+      env: { ...process.env, PROMPTRAIL_ROUTER_CONFIG: configPath },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdoutPromise = readStream(child.stdout);
+    const stderrPromise = readStream(child.stderr);
+    child.stdin.end(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "Do it.",
+        model: "gpt-5.6-sol",
+        transcript_path: transcriptPath,
+      }),
+    );
+    const [exitCode] = await once(child, "close");
+    assert.equal(exitCode, 0);
+    assert.equal(await stderrPromise, "");
+    assert.deepEqual(JSON.parse(await stdoutPromise), {
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: "PromptRail: gpt-5.6-sol | xhigh",
+      },
+    });
+    assert.deepEqual(routeRequest, {
+      prompt: "Do it.",
+      model: "gpt-5.6-sol",
+      previous_user_prompt: "Fix the race condition in the cache worker.",
+      previous_assistant_summary:
+        "Found unsafe shared mutation; implement synchronization and test it.",
     });
   } finally {
     await close(server);

@@ -1,5 +1,10 @@
 import { loadRouterConfig, routerConfigPath } from "../src/config.mjs";
-import { thinkingLevelForEffort } from "../src/routing.mjs";
+import { readFile } from "node:fs/promises";
+import {
+  extractPreviousTurnContextFromTranscript,
+  FIRST_TURN_ASSISTANT_CONTEXT,
+  FIRST_TURN_USER_CONTEXT,
+} from "../src/routing.mjs";
 
 async function readHookInput() {
   let input = "";
@@ -17,6 +22,22 @@ async function main() {
     throw new TypeError("UserPromptSubmit did not provide a prompt and model.");
   }
 
+  let previousUserPrompt = String(input?.previous_user_prompt || "").trim();
+  let previousAssistantSummary = String(input?.previous_assistant_summary || "").trim();
+  const transcriptPath = String(input?.transcript_path || "").trim();
+  if ((!previousUserPrompt || !previousAssistantSummary) && transcriptPath) {
+    try {
+      const transcript = await readFile(transcriptPath, "utf8");
+      const context = extractPreviousTurnContextFromTranscript(transcript, prompt);
+      previousUserPrompt ||= context.previousUserPrompt;
+      previousAssistantSummary ||= context.previousAssistantSummary;
+    } catch {
+      // Use explicit first-turn context when the transcript is unavailable.
+    }
+  }
+  previousUserPrompt ||= FIRST_TURN_USER_CONTEXT;
+  previousAssistantSummary ||= FIRST_TURN_ASSISTANT_CONTEXT;
+
   const config = await loadRouterConfig(routerConfigPath());
   const response = await fetch(`http://${config.host}:${config.port}/route`, {
     method: "POST",
@@ -25,20 +46,23 @@ async function main() {
       "content-type": "application/json",
       accept: "application/json",
     },
-    body: JSON.stringify({ prompt, model }),
+    body: JSON.stringify({
+      prompt,
+      model,
+      previous_user_prompt: previousUserPrompt,
+      previous_assistant_summary: previousAssistantSummary,
+    }),
   });
   if (!response.ok) {
     throw new Error(`PromptRail local router returned HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
   }
   const route = await response.json();
-  const thinkingLevel = thinkingLevelForEffort(route.effort);
-  const label = `Thinking Level: ${thinkingLevel}`;
+  const status = `PromptRail: ${route.model} | ${route.effort}`;
   process.stdout.write(
     `${JSON.stringify({
-      systemMessage: label,
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: `Begin your next user-visible message with exactly "${label}" on its own line, before any other text. Do not add other wording to that line.`,
+        additionalContext: status,
       },
     })}\n`,
   );
