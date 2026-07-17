@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+### Minor Changes
+
+- Add contextual model and thinking routing for Codex. Each request is independently routed with the current prompt and the previous user and assistant turn, while preserving the user's native Luna, Terra, and Sol models.
+- Add the co-located LFM2 model-tier and ArchRouter reasoning-grade worker, including multi-turn routing benchmarks and regression coverage.
+
 ## 1.2.2
 
 ### Patch Changes
