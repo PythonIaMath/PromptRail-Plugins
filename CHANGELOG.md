@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+### Patch Changes
+
+- Route every Claude Code inference request through the production LFM2 model-tier and ArchRouter thinking worker. The router now selects and applies the Claude model and effort together, preserves compact prior-turn context, and displays both choices in the submitted-prompt hook.
+
 ## 1.3.0
 
 ### Minor Changes

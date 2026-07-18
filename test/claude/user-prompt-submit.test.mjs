@@ -45,7 +45,11 @@ test("selects and displays the Claude thinking level for the submitted session",
       authorization: request.headers.authorization,
       body: JSON.parse(body),
     };
-    const payload = JSON.stringify({ grade: 4, effort: "xhigh" });
+    const payload = JSON.stringify({
+      thinking_grade: 4,
+      model: "claude-fable-5",
+      effort: "xhigh",
+    });
     response.writeHead(200, {
       "content-type": "application/json",
       "content-length": Buffer.byteLength(payload),
@@ -84,10 +88,10 @@ test("selects and displays the Claude thinking level for the submitted session",
     assert.equal(exitCode, 0);
     assert.equal(stderr, "");
     assert.deepEqual(JSON.parse(stdout), {
-      systemMessage: "Thinking Level: Extra High",
+      systemMessage: "PromptRail: claude-fable-5 | Extra High",
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: "PromptRail selected Extra High effort for this turn.",
+        additionalContext: "PromptRail selected claude-fable-5 with Extra High effort for this turn.",
       },
     });
     assert.deepEqual(routeRequest, {

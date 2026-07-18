@@ -14,7 +14,7 @@ process.stdout.write(
   `${JSON.stringify({
     hookSpecificOutput: {
       hookEventName: "SessionStart",
-      additionalContext: "PromptRail subscription-only effort routing is active with five Claude effort levels.",
+      additionalContext: "PromptRail subscription-only model and effort routing is active with five Claude thinking levels.",
     },
   })}\n`,
 );

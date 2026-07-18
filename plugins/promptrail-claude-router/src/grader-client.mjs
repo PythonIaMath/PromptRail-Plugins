@@ -1,4 +1,25 @@
-export async function gradePrompt({ graderUrl, routerToken, prompt, fetchImpl = fetch }) {
+export async function gradePrompt({
+  graderUrl,
+  routerToken,
+  prompt,
+  model,
+  previousUserPrompt,
+  previousAssistantSummary,
+  fetchImpl = fetch,
+}) {
+  if (!String(previousUserPrompt || "").trim()) {
+    throw new TypeError("previousUserPrompt is required.");
+  }
+  if (!String(previousAssistantSummary || "").trim()) {
+    throw new TypeError("previousAssistantSummary is required.");
+  }
+  const body = {
+    client: "claude",
+    prompt,
+    current_model: String(model || "").trim() || null,
+    previous_user_prompt: previousUserPrompt,
+    previous_assistant_summary: previousAssistantSummary,
+  };
   const response = await fetchImpl(graderUrl, {
     method: "POST",
     headers: {
@@ -6,7 +27,7 @@ export async function gradePrompt({ graderUrl, routerToken, prompt, fetchImpl = 
       "content-type": "application/json",
       accept: "application/json",
     },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     throw new Error(
@@ -14,11 +35,20 @@ export async function gradePrompt({ graderUrl, routerToken, prompt, fetchImpl = 
     );
   }
   const payload = await response.json();
-  if (!Number.isInteger(payload.grade) || payload.grade < 1 || payload.grade > 5) {
-    throw new RangeError("PromptRail Claude grader returned an invalid grade; expected an integer from 1 through 5.");
+  const grade = payload?.thinking_grade;
+  if (!Number.isInteger(grade) || grade < 1 || grade > 5) {
+    throw new RangeError(
+      "PromptRail Claude router returned an invalid thinking_grade; expected an integer from 1 through 5.",
+    );
+  }
+  const selectedModel = String(payload?.model || "").trim();
+  if (!selectedModel) {
+    throw new TypeError("PromptRail Claude router returned an empty model.");
   }
   return {
-    grade: payload.grade,
-    latencyMs: Number(payload.latency_ms || 0),
+    grade,
+    model: selectedModel,
+    difficulty: Number(payload.difficulty || 0),
+    latencyMs: Number(payload.latency_ms?.total || 0),
   };
 }

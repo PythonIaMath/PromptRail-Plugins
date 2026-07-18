@@ -8,10 +8,16 @@ import {
   loadRouterConfig,
 } from "./config.mjs";
 import { gradePrompt } from "./grader-client.mjs";
-import { applyGrade, effortForGrade, extractLatestUserPrompt } from "./routing.mjs";
+import {
+  applyRoute,
+  effortForGrade,
+  extractLatestUserPrompt,
+  extractPreviousTurnContext,
+  FIRST_TURN_ASSISTANT_CONTEXT,
+  FIRST_TURN_USER_CONTEXT,
+} from "./routing.mjs";
 
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
-const ROUTE_CACHE_TTL_MS = 30 * 60 * 1000;
 const ALLOWED_UPSTREAM_REQUESTS = new Set([
   "HEAD /",
   "GET /v1/models",
@@ -95,7 +101,16 @@ function validateRouteInput(payload) {
   if (!prompt) {
     throw new TypeError("PromptRail route request requires a non-empty prompt.");
   }
-  return { sessionId, prompt };
+  return {
+    sessionId,
+    prompt,
+    model: String(payload?.model || payload?.currentModel || "").trim(),
+    previousUserPrompt:
+      String(payload?.previousUserPrompt || "").trim() || FIRST_TURN_USER_CONTEXT,
+    previousAssistantSummary:
+      String(payload?.previousAssistantSummary || "").trim()
+      || FIRST_TURN_ASSISTANT_CONTEXT,
+  };
 }
 
 function requestPath(request) {
@@ -137,6 +152,7 @@ async function pipeFetchResponse(upstream, response, route) {
   if (route) {
     headers["x-promptrail-grade"] = String(route.grade);
     headers["x-promptrail-effort"] = route.effort;
+    headers["x-promptrail-model"] = route.model;
   }
   response.writeHead(upstream.status, headers);
   if (!upstream.body) {
@@ -158,41 +174,18 @@ export function createProxyServer({
   upstreamBaseUrl = ANTHROPIC_UPSTREAM_BASE_URL,
   logger = console,
 }) {
-  const routeCache = new Map();
-
-  function cacheRoute(sessionId, route, origin = "hook") {
-    const now = Date.now();
-    for (const [key, cached] of routeCache) {
-      if (now - cached.createdAt > ROUTE_CACHE_TTL_MS) {
-        routeCache.delete(key);
-      }
-    }
-    routeCache.set(sessionId, { ...route, origin, createdAt: now });
-  }
-
-  function cachedRoute(sessionId) {
-    const cached = routeCache.get(sessionId);
-    if (!cached || Date.now() - cached.createdAt > ROUTE_CACHE_TTL_MS) {
-      routeCache.delete(sessionId);
-      return null;
-    }
-    return cached;
-  }
-
-  async function selectRoute(sessionId, body) {
-    const cached = cachedRoute(sessionId);
-    if (cached) {
-      return { ...cached, source: `${cached.origin}_cache` };
-    }
+  async function selectRoute(body) {
     const prompt = extractLatestUserPrompt(body);
+    const context = extractPreviousTurnContext(body);
     const graded = await gradePrompt({
       graderUrl: config.graderUrl,
       routerToken: config.routerToken,
       prompt,
+      model: body.model,
+      ...context,
       fetchImpl,
     });
     const route = { ...graded, effort: effortForGrade(graded.grade) };
-    cacheRoute(sessionId, route, "proxy");
     return { ...route, source: "proxy_request" };
   }
 
@@ -209,17 +202,24 @@ export function createProxyServer({
     try {
       if (request.method === "POST" && request.url === "/route") {
         assertRouterAuth(request, config.routerToken);
-        const { sessionId, prompt } = validateRouteInput(
+        const {
+          prompt,
+          model,
+          previousUserPrompt,
+          previousAssistantSummary,
+        } = validateRouteInput(
           JSON.parse(await readRequestBody(request)),
         );
         const graded = await gradePrompt({
           graderUrl: config.graderUrl,
           routerToken: config.routerToken,
           prompt,
+          model,
+          previousUserPrompt,
+          previousAssistantSummary,
           fetchImpl,
         });
         const route = { ...graded, effort: effortForGrade(graded.grade) };
-        cacheRoute(sessionId, route);
         jsonResponse(response, 200, route);
         return;
       }
@@ -240,15 +240,16 @@ export function createProxyServer({
           throw error;
         }
         const requestBody = JSON.parse(bodyText);
-        const graded = await selectRoute(sessionId, requestBody);
-        const applied = applyGrade(requestBody, graded.grade);
+        const graded = await selectRoute(requestBody);
+        const applied = applyRoute(requestBody, graded);
         bodyText = JSON.stringify(applied.body);
-        route = { ...graded, effort: applied.effort };
+        route = { ...graded, effort: applied.effort, model: applied.model };
         logger.info?.(
           JSON.stringify({
             event: "promptrail_claude_route",
             grade: route.grade,
             effort: route.effort,
+            model: route.model,
             route_source: graded.source,
             grader_latency_ms: route.latencyMs,
           }),

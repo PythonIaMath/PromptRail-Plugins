@@ -28,6 +28,15 @@ function messageBody() {
   };
 }
 
+function routerPayload(thinkingGrade, model = "claude-fable-5", latency = 0) {
+  return {
+    thinking_grade: thinkingGrade,
+    model,
+    difficulty: model.includes("opus") ? 3 : 2,
+    latency_ms: { total: latency },
+  };
+}
+
 async function selectRoute(port, prompt = "Prove this queue is linearizable.") {
   return fetch(`http://127.0.0.1:${port}/route`, {
     method: "POST",
@@ -102,10 +111,7 @@ test("routes a Claude subscription request and preserves protocol capabilities",
     calls.push({ url, options });
     if (url === "https://grader.test/grade") {
       return new Response(
-        JSON.stringify({
-          grade: 4,
-          latency_ms: 11,
-        }),
+        JSON.stringify(routerPayload(4, "claude-fable-5", 11)),
         { status: 200, headers: { "content-type": "application/json" } },
       );
     }
@@ -125,7 +131,13 @@ test("routes a Claude subscription request and preserves protocol capabilities",
   try {
     const routeResponse = await selectRoute(port);
     assert.equal(routeResponse.status, 200);
-    assert.equal((await routeResponse.json()).effort, "xhigh");
+    assert.deepEqual(await routeResponse.json(), {
+      grade: 4,
+      model: "claude-fable-5",
+      difficulty: 2,
+      latencyMs: 11,
+      effort: "xhigh",
+    });
 
     const response = await fetch(`http://127.0.0.1:${port}/v1/messages?beta=true`, {
       method: "POST",
@@ -143,16 +155,20 @@ test("routes a Claude subscription request and preserves protocol capabilities",
     assert.equal(response.headers.get("x-promptrail-effort"), "xhigh");
     assert.match(await response.text(), /message_stop/);
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.deepEqual(JSON.parse(calls[0].options.body), {
+      client: "claude",
       prompt: "Prove this queue is linearizable.",
+      current_model: null,
+      previous_user_prompt: "No previous user prompt; this is the first turn.",
+      previous_assistant_summary: "No previous assistant response; this is the first turn.",
     });
     assert.doesNotMatch(
       calls[0].options.body,
       /claude-oauth-secret|private system context|session-123/,
     );
 
-    const upstream = calls[1];
+    const upstream = calls[2];
     assert.equal(upstream.options.headers.authorization, "Bearer claude-oauth-secret");
     assert.equal(
       upstream.options.headers["anthropic-beta"],
@@ -160,12 +176,13 @@ test("routes a Claude subscription request and preserves protocol capabilities",
     );
     assert.equal(upstream.options.headers["anthropic-version"], "2023-06-01");
     assert.equal(JSON.parse(upstream.options.body).output_config.effort, "xhigh");
+    assert.equal(JSON.parse(upstream.options.body).model, "claude-fable-5");
   } finally {
     await close(server);
   }
 });
 
-test("keeps the selected effort for subsequent model rounds in the same turn", async () => {
+test("regrades every Claude request instead of reusing a prior route", async () => {
   let graderCalls = 0;
   const upstreamBodies = [];
   const server = createProxyServer({
@@ -173,7 +190,7 @@ test("keeps the selected effort for subsequent model rounds in the same turn", a
     fetchImpl: async (url, options) => {
       if (url === "https://grader.test/grade") {
         graderCalls += 1;
-        return new Response(JSON.stringify({ grade: 2 }), {
+        return new Response(JSON.stringify(routerPayload(2, "claude-sonnet-5")), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -200,10 +217,14 @@ test("keeps the selected effort for subsequent model rounds in the same turn", a
       });
       assert.equal(response.status, 200);
     }
-    assert.equal(graderCalls, 1);
+    assert.equal(graderCalls, 3);
     assert.deepEqual(upstreamBodies.map((body) => body.output_config.effort), [
       "medium",
       "medium",
+    ]);
+    assert.deepEqual(upstreamBodies.map((body) => body.model), [
+      "claude-sonnet-5",
+      "claude-sonnet-5",
     ]);
   } finally {
     await close(server);
@@ -248,7 +269,7 @@ test("forwards token counting without requiring an effort route", async () => {
   }
 });
 
-test("grades and caches requests from sessions that started before hook installation", async () => {
+test("regrades requests from sessions that started before hook installation", async () => {
   const calls = [];
   const logs = [];
   const server = createProxyServer({
@@ -256,7 +277,7 @@ test("grades and caches requests from sessions that started before hook installa
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       if (url === "https://grader.test/grade") {
-        return new Response(JSON.stringify({ grade: 4, latency_ms: 13 }), {
+        return new Response(JSON.stringify(routerPayload(4, "claude-fable-5", 13)), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -284,23 +305,25 @@ test("grades and caches requests from sessions that started before hook installa
       assert.equal(response.headers.get("x-promptrail-effort"), "xhigh");
     }
 
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     assert.equal(calls[0].url, "https://grader.test/grade");
     assert.deepEqual(JSON.parse(calls[0].options.body), {
+      client: "claude",
       prompt: "Prove this queue is linearizable.",
+      current_model: "claude-opus-4-8",
+      previous_user_prompt: "No previous user prompt; this is the first turn.",
+      previous_assistant_summary: "No previous assistant response; this is the first turn.",
     });
     assert.doesNotMatch(
       calls[0].options.body,
       /private system context|claude-oauth-secret|session-123/,
     );
     assert.deepEqual(
-      calls.slice(1).map(({ options }) => JSON.parse(options.body).output_config.effort),
+      calls.filter(({ url }) => url !== "https://grader.test/grade")
+        .map(({ options }) => JSON.parse(options.body).output_config.effort),
       ["xhigh", "xhigh"],
     );
-    assert.deepEqual(logs.map(({ route_source }) => route_source), [
-      "proxy_request",
-      "proxy_cache",
-    ]);
+    assert.deepEqual(logs.map(({ route_source }) => route_source), ["proxy_request", "proxy_request"]);
   } finally {
     await close(server);
   }

@@ -14,6 +14,11 @@ export const EFFORT_TO_THINKING_LEVEL = Object.freeze({
   max: "Max",
 });
 
+const MAX_ASSISTANT_CONTEXT_CHARACTERS = 2_000;
+export const FIRST_TURN_USER_CONTEXT = "No previous user prompt; this is the first turn.";
+export const FIRST_TURN_ASSISTANT_CONTEXT =
+  "No previous assistant response; this is the first turn.";
+
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -32,6 +37,33 @@ function textFromUserContent(content) {
     .join("\n");
 }
 
+function compactAssistantText(text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_ASSISTANT_CONTEXT_CHARACTERS) {
+    return normalized;
+  }
+  return `${normalized.slice(0, MAX_ASSISTANT_CONTEXT_CHARACTERS - 1).trimEnd()}…`;
+}
+
+function textFromAssistantContent(content) {
+  if (typeof content === "string") {
+    return compactAssistantText(content);
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return compactAssistantText(
+    content
+      .filter(
+        (block) =>
+          isObject(block) && block.type === "text" && typeof block.text === "string",
+      )
+      .map((block) => block.text.trim())
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
 export function extractLatestUserPrompt(body) {
   if (!isObject(body) || !Array.isArray(body.messages)) {
     throw new TypeError("Anthropic Messages request must include a messages array.");
@@ -47,6 +79,69 @@ export function extractLatestUserPrompt(body) {
     }
   }
   throw new TypeError("Anthropic Messages request does not contain user text for PromptRail routing.");
+}
+
+export function extractPreviousTurnContext(body) {
+  if (!isObject(body) || !Array.isArray(body.messages)) {
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
+  }
+
+  let currentUserIndex = -1;
+  for (let index = body.messages.length - 1; index >= 0; index -= 1) {
+    const message = body.messages[index];
+    if (isObject(message) && message.role === "user" && textFromUserContent(message.content)) {
+      currentUserIndex = index;
+      break;
+    }
+  }
+  if (currentUserIndex < 0) {
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
+  }
+
+  let previousUserIndex = -1;
+  let previousUserPrompt = "";
+  for (let index = currentUserIndex - 1; index >= 0; index -= 1) {
+    const message = body.messages[index];
+    if (!isObject(message) || message.role !== "user") {
+      continue;
+    }
+    const text = textFromUserContent(message.content);
+    if (text) {
+      previousUserIndex = index;
+      previousUserPrompt = text;
+      break;
+    }
+  }
+  if (previousUserIndex < 0) {
+    return {
+      previousUserPrompt: FIRST_TURN_USER_CONTEXT,
+      previousAssistantSummary: FIRST_TURN_ASSISTANT_CONTEXT,
+    };
+  }
+
+  let previousAssistantSummary = "";
+  for (let index = currentUserIndex - 1; index > previousUserIndex; index -= 1) {
+    const message = body.messages[index];
+    if (!isObject(message) || message.role !== "assistant") {
+      continue;
+    }
+    previousAssistantSummary = textFromAssistantContent(message.content);
+    if (previousAssistantSummary) {
+      break;
+    }
+  }
+
+  return {
+    previousUserPrompt,
+    previousAssistantSummary:
+      previousAssistantSummary || "The previous assistant response did not include a summary.",
+  };
 }
 
 export function supportedEffortsForModel(model) {
@@ -108,5 +203,18 @@ export function applyGrade(body, grade) {
       },
     },
     effort,
+  };
+}
+
+export function applyRoute(body, route) {
+  const model = String(route?.model || "").trim();
+  if (!model) {
+    throw new TypeError("PromptRail Claude route must include a model.");
+  }
+  const applied = applyGrade({ ...body, model }, route.grade);
+  return {
+    body: applied.body,
+    effort: applied.effort,
+    model,
   };
 }

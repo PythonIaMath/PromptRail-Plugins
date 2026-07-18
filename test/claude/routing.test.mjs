@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  applyRoute,
   applyGrade,
   assertEffortSupported,
   effortForGrade,
   extractLatestUserPrompt,
+  extractPreviousTurnContext,
   supportedEffortsForModel,
   thinkingLevelForEffort,
 } from "../../plugins/promptrail-claude-router/src/routing.mjs";
@@ -71,6 +73,22 @@ test("skips tool-only user messages when recovering the submitted prompt", () =>
   );
 });
 
+test("extracts the prior Claude user prompt and assistant response", () => {
+  assert.deepEqual(
+    extractPreviousTurnContext({
+      messages: [
+        { role: "user", content: "Build a secure session store." },
+        { role: "assistant", content: [{ type: "text", text: "Outlined the schema and threat model." }] },
+        { role: "user", content: "Now implement it with tests." },
+      ],
+    }),
+    {
+      previousUserPrompt: "Build a secure session store.",
+      previousAssistantSummary: "Outlined the schema and threat model.",
+    },
+  );
+});
+
 test("rejects fallback routing when no user-authored text is available", () => {
   assert.throws(
     () => extractLatestUserPrompt({
@@ -99,6 +117,20 @@ test("applies effort without deleting structured output configuration", () => {
     format: { type: "json_schema", schema: { type: "object" } },
   });
   assert.equal(result.effort, "xhigh");
+});
+
+test("applies the routed Claude model and compatible effort together", () => {
+  const result = applyRoute(
+    {
+      model: "claude-opus-4-8",
+      output_config: { effort: "medium" },
+    },
+    { grade: 4, model: "claude-fable-5" },
+  );
+  assert.equal(result.model, "claude-fable-5");
+  assert.equal(result.effort, "xhigh");
+  assert.equal(result.body.model, "claude-fable-5");
+  assert.equal(result.body.output_config.effort, "xhigh");
 });
 
 test("models with five-level support accept every routed effort", () => {
