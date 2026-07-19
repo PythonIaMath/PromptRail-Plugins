@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.2
+
+### Patch Changes
+
+- e506fd3: Update the package description, production routing endpoint, warm-container deployment, and hook output showing the selected model and thinking level.
+
 ## 1.3.1
 
 ### Patch Changes
