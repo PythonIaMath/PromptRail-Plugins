@@ -88,10 +88,10 @@ test("selects and displays the Claude thinking level for the submitted session",
     assert.equal(exitCode, 0);
     assert.equal(stderr, "");
     assert.deepEqual(JSON.parse(stdout), {
-      systemMessage: "PromptRail: claude-fable-5 | Extra High",
+      systemMessage: "Model_Selected: claude-fable-5 | Thinking_Level: Extra High",
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: "PromptRail selected claude-fable-5 with Extra High effort for this turn.",
+        additionalContext: "Model_Selected: claude-fable-5 | Thinking_Level: Extra High",
       },
     });
     assert.deepEqual(routeRequest, {

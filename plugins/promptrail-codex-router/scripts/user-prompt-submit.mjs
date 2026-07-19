@@ -57,7 +57,7 @@ async function main() {
     throw new Error(`PromptRail local router returned HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
   }
   const route = await response.json();
-  const status = `PromptRail: ${route.model} | ${route.effort}`;
+  const status = `Model_Selected: ${route.model} | Thinking_Level: ${route.effort}`;
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {

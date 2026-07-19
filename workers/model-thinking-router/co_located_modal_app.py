@@ -22,14 +22,15 @@ from router_core import (
     ThinkingDecision,
     build_route,
     conversation_messages,
-    parse_difficulty,
+    difficulty_token_ids,
     parse_model_list,
+    select_difficulty_from_logits,
     validate_client,
     validate_conversation_context,
     validate_prompt,
 )
 
-APP_NAME = "promptrail-colocated-model-thinking-router-v8"
+APP_NAME = "CodexAndClaudePlugin"
 LFM_MODEL_ID = "LiquidAI/LFM2.5-350M"
 ARCH_MODEL_ID = "katanemo/Arch-Router-1.5B"
 LFM_MODEL_PATH = "/models/lfm2"
@@ -86,7 +87,7 @@ def classifier_messages(
             "role": "system",
             "content": (
                 "You are a conservative task-difficulty router. Classify the minimum model "
-                "capability needed and return only JSON in the form {\"difficulty\": N}. "
+                "capability needed and return exactly one digit: 1, 2, or 3. "
                 "Use 1 only for trivial conversation, lookup, formatting, or a single obvious "
                 "mechanical edit. Use 2 for ordinary engineering that requires implementation "
                 "plus tests, debugging across files, or several dependent steps. Use 3 for "
@@ -123,6 +124,7 @@ def configured_model_map() -> dict[str, dict[int, str]]:
     gpu="L4",
     volumes={"/models/arch-cache": arch_model_volume},
     secrets=[modal.Secret.from_name("promptrail-router-service-token")],
+    min_containers=1,
     scaledown_window=600,
     timeout=180,
 )
@@ -154,6 +156,7 @@ class CoLocatedRouterV7:
         ).to("cuda")
         self.lfm_model.eval()
         self.arch_model.eval()
+        self.lfm_difficulty_token_ids = difficulty_token_ids(self.lfm_tokenizer)
         self.lfm_stream = torch.cuda.Stream()
         self.arch_stream = torch.cuda.Stream()
         self.executor = ThreadPoolExecutor(max_workers=2)
@@ -192,22 +195,25 @@ class CoLocatedRouterV7:
             max_length=4096,
         ).to("cuda")
         with torch.cuda.stream(self.lfm_stream), torch.inference_mode():
-            output_ids = self.lfm_model.generate(
+            outputs = self.lfm_model(
                 **inputs,
-                do_sample=False,
-                max_new_tokens=8,
-                pad_token_id=self.lfm_tokenizer.eos_token_id,
+                use_cache=False,
             )
         self.lfm_stream.synchronize()
-        generated = output_ids[:, inputs.input_ids.shape[1] :]
-        raw_output = self.lfm_tokenizer.batch_decode(
-            generated,
-            skip_special_tokens=True,
-        )[0].strip()
-        lfm_difficulty = parse_difficulty(raw_output)
+        final_input_positions = inputs.attention_mask.sum(dim=1) - 1
+        batch_indices = torch.arange(
+            inputs.input_ids.shape[0],
+            device=inputs.input_ids.device,
+        )
+        next_token_logits = outputs.logits[batch_indices, final_input_positions]
+        candidate_logits = next_token_logits[
+            0,
+            list(self.lfm_difficulty_token_ids),
+        ].float().tolist()
+        lfm_difficulty = select_difficulty_from_logits(candidate_logits)
         return ModelDecision(
             difficulty=lfm_difficulty,
-            raw_output=raw_output,
+            raw_output=str(lfm_difficulty),
             latency_ms=(time.perf_counter() - started) * 1000,
         )
 

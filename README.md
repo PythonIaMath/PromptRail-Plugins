@@ -1,7 +1,7 @@
 # PromptRail Plugins
 
-Open-source reasoning-effort routing for Codex and Claude Code, using the subscriptions users
-already have.
+Open-source model and reasoning-effort routing for Codex and Claude Code, using the subscriptions
+users already have.
 
 [PromptRail](https://promptrail.ai) classifies each submitted prompt into an effort grade. A
 loopback-only proxy applies that grade to the outgoing model request while preserving the user's
@@ -75,7 +75,7 @@ git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
 cd PromptRail-Plugins
 
 node bin/promptrail-codex-router.mjs install \
-  --grader-url "https://promptrail--promptrail-codex-effort-grader-effortgrader-web.modal.run" \
+  --grader-url "https://promptrail--codexandclaudeplugin-colocatedrouterv7-route-v7.modal.run" \
   --token "$PROMPTRAIL_ACCESS_TOKEN"
 ```
 
@@ -109,7 +109,7 @@ git clone https://github.com/PythonIaMath/PromptRail-Plugins.git
 cd PromptRail-Plugins
 
 node bin/promptrail-claude-router.mjs install \
-  --grader-url "https://promptrail--promptrail-claude-effort-grader-claudeeffort-f35715.modal.run" \
+  --grader-url "https://promptrail--codexandclaudeplugin-colocatedrouterv7-route-v7.modal.run" \
   --token "$PROMPTRAIL_ACCESS_TOKEN"
 ```
 

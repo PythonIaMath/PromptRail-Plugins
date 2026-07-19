@@ -23,6 +23,54 @@ class RouterCoreTest(unittest.TestCase):
         with self.assertRaises(router_core.RouteValidationError):
             router_core.parse_difficulty("4")
 
+    def test_builds_distinct_single_token_difficulty_labels(self) -> None:
+        class Tokenizer:
+            def encode(self, label: str, *, add_special_tokens: bool) -> list[int]:
+                self.assert_no_special_tokens(add_special_tokens)
+                return [{"1": 101, "2": 102, "3": 103}[label]]
+
+            @staticmethod
+            def assert_no_special_tokens(add_special_tokens: bool) -> None:
+                if add_special_tokens:
+                    raise AssertionError("difficulty labels must not add special tokens")
+
+        self.assertEqual(
+            router_core.difficulty_token_ids(Tokenizer()),
+            (101, 102, 103),
+        )
+
+    def test_rejects_invalid_difficulty_tokenization(self) -> None:
+        class MultiTokenTokenizer:
+            @staticmethod
+            def encode(label: str, *, add_special_tokens: bool) -> list[int]:
+                return [int(label), 99]
+
+        class DuplicateTokenTokenizer:
+            @staticmethod
+            def encode(label: str, *, add_special_tokens: bool) -> list[int]:
+                return [99]
+
+        with self.assertRaises(router_core.RouteValidationError):
+            router_core.difficulty_token_ids(MultiTokenTokenizer())
+        with self.assertRaises(router_core.RouteValidationError):
+            router_core.difficulty_token_ids(DuplicateTokenTokenizer())
+
+    def test_selects_difficulty_from_only_valid_candidate_logits(self) -> None:
+        self.assertEqual(
+            router_core.select_difficulty_from_logits([-1.0, 2.5, 0.3]),
+            2,
+        )
+        self.assertEqual(
+            router_core.select_difficulty_from_logits([0.5, 0.5, 0.5]),
+            3,
+        )
+
+    def test_rejects_invalid_difficulty_logits(self) -> None:
+        for logits in ([1.0, 2.0], [1.0, float("nan"), 3.0], ["bad", 2.0, 3.0]):
+            with self.subTest(logits=logits):
+                with self.assertRaises(router_core.RouteValidationError):
+                    router_core.select_difficulty_from_logits(logits)
+
     def test_conversation_messages_require_and_preserve_last_turn(self) -> None:
         messages = router_core.conversation_messages(
             "Do it.",

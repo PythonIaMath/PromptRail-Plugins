@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -143,6 +144,37 @@ def parse_difficulty(raw_output: Any) -> int:
     raise RouteValidationError(
         f"LFM2 returned an invalid difficulty classification: {text[:120]!r}",
     )
+
+
+def difficulty_token_ids(tokenizer: Any) -> tuple[int, int, int]:
+    token_ids: list[int] = []
+    for label in ("1", "2", "3"):
+        encoded = tokenizer.encode(label, add_special_tokens=False)
+        if len(encoded) != 1 or isinstance(encoded[0], bool):
+            raise RouteValidationError(
+                f"LFM2 difficulty label {label!r} must encode to exactly one token.",
+            )
+        token_ids.append(int(encoded[0]))
+
+    if len(set(token_ids)) != len(token_ids):
+        raise RouteValidationError("LFM2 difficulty labels must use distinct tokens.")
+    return tuple(token_ids)
+
+
+def select_difficulty_from_logits(candidate_logits: Any) -> int:
+    try:
+        values = [float(value) for value in candidate_logits]
+    except (TypeError, ValueError) as error:
+        raise RouteValidationError(
+            "LFM2 difficulty logits must contain three numeric values.",
+        ) from error
+
+    if len(values) != len(DIFFICULTY_LABELS):
+        raise RouteValidationError("LFM2 difficulty logits must contain exactly three values.")
+    if any(not math.isfinite(value) for value in values):
+        raise RouteValidationError("LFM2 difficulty logits must all be finite.")
+
+    return max(range(len(values)), key=lambda index: (values[index], index)) + 1
 
 
 def route_codes(client: Any) -> tuple[str, ...]:

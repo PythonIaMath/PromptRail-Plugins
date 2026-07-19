@@ -90,7 +90,7 @@ test("exposes the selected route as hook context without an assistant instructio
     assert.deepEqual(JSON.parse(stdout), {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: "PromptRail: gpt-5.6-terra | medium",
+        additionalContext: "Model_Selected: gpt-5.6-terra | Thinking_Level: medium",
       },
     });
     assert.deepEqual(routeRequest, {
@@ -183,7 +183,7 @@ test("uses the previous turn from the Codex transcript for the visible route", a
     assert.deepEqual(JSON.parse(await stdoutPromise), {
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: "PromptRail: gpt-5.6-sol | xhigh",
+        additionalContext: "Model_Selected: gpt-5.6-sol | Thinking_Level: xhigh",
       },
     });
     assert.deepEqual(routeRequest, {

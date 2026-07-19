@@ -38,12 +38,14 @@ async function main() {
   if (!selectedModel) {
     throw new TypeError("PromptRail local Claude router returned an empty model.");
   }
+  const thinkingLevel = label.replace("Thinking Level: ", "");
+  const status = `Model_Selected: ${selectedModel} | Thinking_Level: ${thinkingLevel}`;
   process.stdout.write(
     `${JSON.stringify({
-      systemMessage: `PromptRail: ${selectedModel} | ${label.replace("Thinking Level: ", "")}`,
+      systemMessage: status,
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
-        additionalContext: `PromptRail selected ${selectedModel} with ${label.replace("Thinking Level: ", "")} effort for this turn.`,
+        additionalContext: status,
       },
     })}\n`,
   );
