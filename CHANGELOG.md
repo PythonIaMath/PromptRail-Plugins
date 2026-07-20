@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.6
+
+### Patch Changes
+
+- 91aaa86: Report skipped or not-installed clients cleanly from `promptrail status both`.
+
 ## 1.3.5
 
 ### Patch Changes
