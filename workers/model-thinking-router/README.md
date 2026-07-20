@@ -30,8 +30,10 @@ python3 -m unittest discover -s workers/model-thinking-router/tests -v
 
 ## Deploy
 
-The worker expects the existing `promptrail-router-service-token` Modal secret to expose
-`PROMPTRAIL_ROUTER_TOKEN`.
+The worker expects these existing Modal secrets:
+
+- `promptrail-router-service-token`, exposing `PROMPTRAIL_ROUTER_TOKEN` for internal requests.
+- `lerouter-mongodb`, exposing `MONGODB_URI` for customer token and subscription validation.
 
 ```bash
 modal deploy workers/model-thinking-router/co_located_modal_app.py
@@ -63,7 +65,8 @@ modal run --write-result /tmp/colocated-benchmark.json \
 LFM2 and ArchRouter receive the same three-message context: previous user prompt, previous
 assistant summary, and current prompt.
 
-The endpoint requires `Authorization: Bearer <PROMPTRAIL_ROUTER_TOKEN>`.
+The endpoint requires `Authorization: Bearer <token>`. It accepts the private service token or a
+non-revoked PromptRail customer token whose owner has an active or trialing Plugins subscription.
 
 ## Latency benchmark
 

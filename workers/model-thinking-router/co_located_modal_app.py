@@ -15,6 +15,7 @@ from fastapi import Header, HTTPException
 from pydantic import BaseModel
 
 from co_located_core import format_arch_prompt, parse_arch_grade
+from internal_service_auth import require_router_auth
 from router_core import (
     DEFAULT_MODEL_MAP,
     EFFORT_MAP,
@@ -50,6 +51,7 @@ image = (
     .uv_pip_install(
         "accelerate==1.9.0",
         "fastapi[standard]==0.116.1",
+        "pymongo",
         "torch==2.7.1",
         "transformers==5.14.1",
     )
@@ -65,7 +67,17 @@ image = (
         "workers/model-thinking-router/co_located_core.py",
         remote_path="/root/co_located_core.py",
     )
+    .add_local_file(
+        "workers/model-thinking-router/internal_service_auth.py",
+        remote_path="/root/internal_service_auth.py",
+    )
 )
+
+router_secret = modal.Secret.from_name(
+    "promptrail-router-service-token",
+    required_keys=["PROMPTRAIL_ROUTER_TOKEN"],
+)
+mongodb_secret = modal.Secret.from_name("lerouter-mongodb", required_keys=["MONGODB_URI"])
 
 
 class RouteBody(BaseModel):
@@ -123,7 +135,7 @@ def configured_model_map() -> dict[str, dict[int, str]]:
     image=image,
     gpu="L4",
     volumes={"/models/arch-cache": arch_model_volume},
-    secrets=[modal.Secret.from_name("promptrail-router-service-token")],
+    secrets=[router_secret, mongodb_secret],
     min_containers=1,
     scaledown_window=600,
     timeout=180,
@@ -167,9 +179,7 @@ class CoLocatedRouterV7:
         self.executor.shutdown(wait=False, cancel_futures=True)
 
     def authorize(self, authorization: str | None) -> None:
-        expected = os.environ.get("PROMPTRAIL_ROUTER_TOKEN", "").strip()
-        if not expected or authorization != f"Bearer {expected}":
-            raise HTTPException(status_code=401, detail="router authentication is required")
+        require_router_auth(authorization)
 
     def classify_model(
         self,
@@ -418,7 +428,7 @@ def summarize(values: list[float]) -> dict[str, float]:
 
 @app.function(
     image=image,
-    secrets=[modal.Secret.from_name("promptrail-router-service-token")],
+    secrets=[router_secret, mongodb_secret],
     timeout=900,
 )
 def benchmark(
