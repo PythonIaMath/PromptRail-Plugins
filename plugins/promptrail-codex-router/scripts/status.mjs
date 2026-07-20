@@ -20,6 +20,10 @@ try {
     )}\n`,
   );
 } catch (error) {
-  process.stderr.write(`PromptRail router is not healthy: ${error.message}\n`);
-  process.exitCode = 1;
+  if (error?.code === "ENOENT") {
+    process.stdout.write(`${JSON.stringify({ configured: false, healthy: false, reason: "not_installed" }, null, 2)}\n`);
+  } else {
+    process.stderr.write(`PromptRail router is not healthy: ${error.message}\n`);
+    process.exitCode = 1;
+  }
 }
