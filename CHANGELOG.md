@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.4
+
+### Patch Changes
+
+- ab2fc54: Make uninstall idempotent, support Linux containers without systemd, skip unavailable clients during combined setup, and remove the unreliable interactive npm postinstall hook. Use the explicit `npx @promptrail/plugins` setup command instead.
+
 ## 1.3.3
 
 ### Patch Changes
