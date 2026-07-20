@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.5
+
+### Patch Changes
+
+- 8303b65: Skip Claude cleanly during combined setup when Claude Code is installed but not logged in, and support Node.js 18.19 environments.
+
 ## 1.3.4
 
 ### Patch Changes

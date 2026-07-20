@@ -1,6 +1,6 @@
 {
   "name": "@promptrail/plugins",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Open-source PromptRail subscription-only model and reasoning-effort routers for Codex and Claude Code.",
   "type": "module",
   "bin": {
