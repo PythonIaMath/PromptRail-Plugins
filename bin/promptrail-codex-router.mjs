@@ -93,11 +93,21 @@ async function install() {
       "install requires --grader-url and --token, or PROMPTRAIL_GRADER_URL and PROMPTRAIL_ROUTER_TOKEN.",
     );
   }
+  let codex;
+  try {
+    codex = codexBinary();
+  } catch (error) {
+    if (process.env.PROMPTRAIL_OPTIONAL_CLIENT === "1") {
+      process.stdout.write("Codex CLI was not found; skipped Codex setup.\n");
+      return;
+    }
+    throw error;
+  }
   let installedPluginRoot = resolve(repositoryRoot, "plugins", "promptrail-codex-router");
   if (!process.argv.includes("--skip-plugin-install")) {
     const marketplaceSource = process.env.PROMPTRAIL_MARKETPLACE_SOURCE || repositoryRoot;
-    runJson(codexBinary(), ["plugin", "marketplace", "add", marketplaceSource, "--json"]);
-    const installedPlugin = runJson(codexBinary(), [
+    runJson(codex, ["plugin", "marketplace", "add", marketplaceSource, "--json"]);
+    const installedPlugin = runJson(codex, [
       "plugin",
       "add",
       "promptrail-codex-router@promptrail",
@@ -111,8 +121,10 @@ async function install() {
     host: DEFAULT_HOST,
     port: DEFAULT_PORT,
   });
-  const catalogPath = await installModelCatalog(installedPluginRoot);
-  const installed = await installCodexConfig(undefined, undefined, catalogPath);
+  const catalogPath = await installModelCatalog(installedPluginRoot, undefined, codex);
+  const installed = existsSync(installStatePath())
+    ? { path: await upgradeInstalledCodexConfig(catalogPath) }
+    : await installCodexConfig(undefined, undefined, catalogPath);
   const service = await installUserService(installedPluginRoot);
   process.stdout.write(
     `PromptRail router installed. Codex config: ${installed.path}\nUser service: ${service.manager} (${service.path})\nStart a new Codex thread to activate routing.\n`,
@@ -132,6 +144,10 @@ async function status() {
 
 async function uninstall() {
   const path = await uninstallCodexConfig();
+  if (!path) {
+    process.stdout.write("PromptRail Codex router is not installed.\n");
+    return;
+  }
   await uninstallUserService();
   if (!process.argv.includes("--skip-plugin-remove")) {
     run(codexBinary(), ["plugin", "remove", "promptrail-codex-router@promptrail"]);

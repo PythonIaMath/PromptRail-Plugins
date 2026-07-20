@@ -28,9 +28,9 @@ Install both integrations with one shared PromptRail token:
 npx @promptrail/plugins
 ```
 
-If you install with `npm i @promptrail/plugins` in an interactive terminal, the package now starts
-this same setup automatically. In CI or another non-interactive environment, run the command above
-after installation and provide `PROMPTRAIL_ACCESS_TOKEN` when needed.
+Do not use `npm i @promptrail/plugins` as the setup command. npm runs dependency lifecycle scripts
+without a reliable interactive terminal, so it cannot safely request the access token. Use the
+`npx` command above, which opens the secure token prompt directly.
 
 This is equivalent to `npx @promptrail/plugins install both`. The installer asks for your token
 without echoing it. For automated installs:

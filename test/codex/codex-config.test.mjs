@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
-import { patchCodexConfig } from "../../lib/codex-config.mjs";
+import { join } from "node:path";
+
+import { patchCodexConfig, uninstallCodexConfig } from "../../lib/codex-config.mjs";
 
 test("configures PromptRail as the default provider", () => {
   const patched = patchCodexConfig(
@@ -29,4 +33,13 @@ test("refuses to overwrite an existing PromptRail provider", () => {
     () => patchCodexConfig("[model_providers.promptrail]\nbase_url = \"http://other\"\n"),
     /refusing to overwrite/,
   );
+});
+
+test("treats uninstalling a missing Codex router as already uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-missing-codex-"));
+  try {
+    assert.equal(await uninstallCodexConfig(join(directory, "install-state.json")), null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

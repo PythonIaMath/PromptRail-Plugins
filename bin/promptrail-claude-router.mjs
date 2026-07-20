@@ -30,6 +30,11 @@ function claudeBinary() {
   return process.env.CLAUDE_BIN || "claude";
 }
 
+function hasClaudeBinary() {
+  const result = spawnSync(claudeBinary(), ["--version"], { encoding: "utf8" });
+  return !result.error && result.status === 0;
+}
+
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
   if (result.error) {
@@ -89,6 +94,11 @@ async function install() {
     );
   }
 
+  if (process.env.PROMPTRAIL_OPTIONAL_CLIENT === "1" && !hasClaudeBinary()) {
+    process.stdout.write("Claude Code CLI was not found; skipped Claude setup.\n");
+    return;
+  }
+
   assertClaudeSubscriptionStatus(
     runJson(claudeBinary(), ["auth", "status", "--json"], { allowNonzeroJson: true }),
   );
@@ -133,6 +143,10 @@ async function status() {
 
 async function uninstall() {
   const settingsPath = await uninstallClaudeSettings();
+  if (!settingsPath) {
+    process.stdout.write("PromptRail Claude router is not installed.\n");
+    return;
+  }
   await uninstallUserService();
   if (!process.argv.includes("--skip-plugin-remove")) {
     run(claudeBinary(), ["plugin", "uninstall", "promptrail-claude-router@promptrail", "--scope", "user"]);

@@ -97,3 +97,12 @@ test("refuses to overwrite settings changed after installation", async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("treats uninstalling a missing Claude router as already uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-missing-claude-"));
+  try {
+    assert.equal(await uninstallClaudeSettings(join(directory, "install-state.json")), null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

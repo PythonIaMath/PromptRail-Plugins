@@ -69,6 +69,8 @@ test("passes secrets through child environment, never command arguments", async 
     assert.equal(call.options.env.PROMPTRAIL_ROUTER_TOKEN, "router-secret");
   }
   assert.equal(calls[0].options.env.PROMPTRAIL_GRADER_URL, DEFAULT_GRADER_URLS.codex);
+  assert.equal(calls[0].options.env.PROMPTRAIL_OPTIONAL_CLIENT, "1");
+  assert.equal(calls[1].options.env.PROMPTRAIL_OPTIONAL_CLIENT, "1");
   assert.equal(
     calls[0].options.env.PROMPTRAIL_MARKETPLACE_SOURCE,
     DEFAULT_MARKETPLACE_SOURCE,

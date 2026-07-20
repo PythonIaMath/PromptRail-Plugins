@@ -33,6 +33,7 @@ jobs:
         uses: changesets/action@06245a4e0a36c064a573d4150030f5ec548e4fcc # v1
         with:
           publish: npm run release
+          version: npm run version-packages
           title: "chore: release package"
           commit: "chore: release package"
         env:

@@ -24,12 +24,11 @@
   ],
   "scripts": {
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && node scripts/sync-version.mjs",
     "release": "changeset publish",
     "test": "node --test",
     "test:codex": "node --test test/codex",
     "test:claude": "node --test test/claude",
-    "postinstall": "node bin/promptrail-postinstall.mjs",
     "prepublishOnly": "npm test"
   },
   "engines": {
