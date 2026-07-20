@@ -18,6 +18,10 @@ import {
 } from "../plugins/promptrail-claude-router/src/config.mjs";
 import { startProxy } from "../plugins/promptrail-claude-router/src/proxy.mjs";
 import { installUserService, uninstallUserService } from "../lib/claude-user-service.mjs";
+import {
+  assertClaudeSubscriptionStatus,
+  claudeSubscriptionError,
+} from "../lib/claude-auth.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -65,17 +69,6 @@ function runJson(command, args, { allowNonzeroJson = false } = {}) {
   }
 }
 
-export function assertClaudeSubscriptionStatus(status) {
-  if (!status?.loggedIn || status.apiProvider !== "firstParty") {
-    throw new Error(
-      "Claude Code must be logged in to a first-party claude.ai subscription. Run `claude auth login` before installing PromptRail.",
-    );
-  }
-  if (/api/i.test(String(status.authMethod || ""))) {
-    throw new Error("Claude Code is using API authentication, not a claude.ai subscription.");
-  }
-}
-
 function installedPluginRoot() {
   const plugins = runJson(claudeBinary(), ["plugin", "list", "--json"]);
   const plugin = plugins.find((entry) => entry.id === "promptrail-claude-router@promptrail");
@@ -99,9 +92,17 @@ async function install() {
     return;
   }
 
-  assertClaudeSubscriptionStatus(
-    runJson(claudeBinary(), ["auth", "status", "--json"], { allowNonzeroJson: true }),
+  const subscriptionStatus = runJson(
+    claudeBinary(),
+    ["auth", "status", "--json"],
+    { allowNonzeroJson: true },
   );
+  const subscriptionError = claudeSubscriptionError(subscriptionStatus);
+  if (process.env.PROMPTRAIL_OPTIONAL_CLIENT === "1" && subscriptionError) {
+    process.stdout.write(`${subscriptionError} Skipped Claude setup.\n`);
+    return;
+  }
+  assertClaudeSubscriptionStatus(subscriptionStatus);
   let pluginRoot = resolve(repositoryRoot, "plugins", "promptrail-claude-router");
   if (!process.argv.includes("--skip-plugin-install")) {
     run(claudeBinary(), ["plugin", "marketplace", "add", repositoryRoot, "--scope", "user"]);

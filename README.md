@@ -51,7 +51,7 @@ npx @promptrail/plugins uninstall both
 
 You need:
 
-- Node.js 20 or newer.
+- Node.js 18.19 or newer.
 - A current Codex or Claude Code installation.
 - A PromptRail beta access token. Request access at
   [support@promptrail.ai](mailto:support@promptrail.ai).
