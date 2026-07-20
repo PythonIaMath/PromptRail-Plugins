@@ -5,6 +5,8 @@
 ### Patch Changes
 
 - e506fd3: Update the package description, production routing endpoint, warm-container deployment, and hook output showing the selected model and thinking level.
+- Make the combined Codex and Claude installer the default and only top-level install path.
+- Reuse one PromptRail token to configure both client integrations.
 
 ## 1.3.1
 

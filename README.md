@@ -22,31 +22,29 @@ do not silently select a default effort or switch to API billing.
 
 ## Quick install
 
-Install the Codex router with one command:
+Install both integrations with one shared PromptRail token:
 
 ```bash
-npx @promptrail/plugins install codex
+npx @promptrail/plugins
 ```
 
-The installer asks for the PromptRail access token without echoing it. Get your access token at
-[promptrail.ai/plugins](https://www.promptrail.ai/plugins). For automated installs, provide the
-token through the environment:
+If you install with `npm i @promptrail/plugins` in an interactive terminal, the package now starts
+this same setup automatically. In CI or another non-interactive environment, run the command above
+after installation and provide `PROMPTRAIL_ACCESS_TOKEN` when needed.
+
+This is equivalent to `npx @promptrail/plugins install both`. The installer asks for your token
+without echoing it. For automated installs:
 
 ```bash
-PROMPTRAIL_ACCESS_TOKEN="..." npx @promptrail/plugins install codex
+PROMPTRAIL_ACCESS_TOKEN="..." npx @promptrail/plugins
 ```
-
-Claude Code uses the same command shape:
-
-```bash
-npx @promptrail/plugins install claude
-```
+Get your access token at [promptrail.ai/plugins](https://www.promptrail.ai/plugins).
 
 Check or remove an installation with `status` or `uninstall`:
 
 ```bash
-npx @promptrail/plugins status codex
-npx @promptrail/plugins uninstall codex
+npx @promptrail/plugins status both
+npx @promptrail/plugins uninstall both
 ```
 
 ## Before installing

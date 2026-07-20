@@ -29,6 +29,7 @@
     "test": "node --test",
     "test:codex": "node --test test/codex",
     "test:claude": "node --test test/claude",
+    "postinstall": "node bin/promptrail-postinstall.mjs",
     "prepublishOnly": "npm test"
   },
   "engines": {
