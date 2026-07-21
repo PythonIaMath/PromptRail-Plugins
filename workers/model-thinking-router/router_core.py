@@ -42,8 +42,9 @@ EFFORT_MAP = {
         5: "max",
     },
 }
-
 _GRADE_PATTERN = re.compile(r"(?:^|\D)([123])(?:\D|$)")
+
+
 class RouteValidationError(ValueError):
     pass
 
@@ -57,8 +58,7 @@ class ModelDecision:
 
 @dataclass(frozen=True)
 class ThinkingDecision:
-    grade: int
-    effort: str
+    tier_grades: tuple[int, int, int]
     latency_ms: float
 
 
@@ -121,7 +121,7 @@ def parse_difficulty(raw_output: Any) -> int:
 
     text = str(raw_output or "").strip()
     if not text:
-        raise RouteValidationError("LFM2 returned an empty difficulty classification.")
+        raise RouteValidationError("model selector returned an empty difficulty classification.")
 
     try:
         parsed = json.loads(text)
@@ -142,7 +142,7 @@ def parse_difficulty(raw_output: Any) -> int:
         return int(match.group(1))
 
     raise RouteValidationError(
-        f"LFM2 returned an invalid difficulty classification: {text[:120]!r}",
+        f"model selector returned an invalid difficulty classification: {text[:120]!r}",
     )
 
 
@@ -206,6 +206,24 @@ def validate_thinking_grade(client: str, grade: Any) -> int:
     return grade
 
 
+def validate_tier_grades(client: Any, tier_grades: Any) -> tuple[int, int, int]:
+    normalized_client = validate_client(client)
+    if not isinstance(tier_grades, (tuple, list)) or len(tier_grades) != 3:
+        raise RouteValidationError("thinking grader must return exactly three model-tier grades.")
+    return tuple(
+        validate_thinking_grade(normalized_client, grade)
+        for grade in tier_grades
+    )
+
+
+def select_tier_grade(client: Any, difficulty: Any, tier_grades: Any) -> int:
+    normalized_client = validate_client(client)
+    if isinstance(difficulty, bool) or not isinstance(difficulty, int) or difficulty not in {1, 2, 3}:
+        raise RouteValidationError("difficulty must be an integer from 1 through 3.")
+    validated = validate_tier_grades(normalized_client, tier_grades)
+    return validated[difficulty - 1]
+
+
 def select_model(client: str, difficulty: int, model_map: dict[str, dict[int, str]]) -> str:
     validate_client(client)
     if difficulty not in DIFFICULTY_LABELS:
@@ -225,12 +243,9 @@ def build_route(
     normalized_client = validate_client(client)
     validate_prompt(prompt)
     difficulty = model_decision.difficulty
-    grade = validate_thinking_grade(normalized_client, thinking_decision.grade)
+    tier_grades = validate_tier_grades(normalized_client, thinking_decision.tier_grades)
+    grade = select_tier_grade(normalized_client, difficulty, tier_grades)
     expected_effort = EFFORT_MAP[normalized_client][grade]
-    if thinking_decision.effort != expected_effort:
-        raise RouteValidationError(
-            f"thinking effort {thinking_decision.effort!r} does not match grade {grade}.",
-        )
 
     return {
         "client": normalized_client,
@@ -239,13 +254,17 @@ def build_route(
         "model": select_model(normalized_client, difficulty, model_map),
         "thinking_grade": grade,
         "effort": expected_effort,
+        "thinking_grades_by_tier": {
+            str(tier): tier_grades[tier - 1]
+            for tier in (1, 2, 3)
+        },
         "latency_ms": {
             "model": round(model_decision.latency_ms, 3),
             "thinking": round(thinking_decision.latency_ms, 3),
             "total": round(total_latency_ms, 3),
         },
         "router": {
-            "model": "lfm2",
+            "model": "model-family-classifier",
             "thinking": "promptrail-effort-grader",
             "execution": "parallel",
         },

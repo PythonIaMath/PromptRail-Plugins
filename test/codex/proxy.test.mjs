@@ -324,7 +324,7 @@ test("regrades with compact assistant output when no explicit summary exists", a
   }
 });
 
-test("promotes a non-trivial grader grade 1 to low in hook and model routing", async () => {
+test("uses the router's grade 1 directly without client-side calibration", async () => {
   const upstreamBodies = [];
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
@@ -353,8 +353,8 @@ test("promotes a non-trivial grader grade 1 to low in hook and model routing", a
     });
     assert.equal(routeResponse.status, 200);
     const route = await routeResponse.json();
-    assert.equal(route.grade, 2);
-    assert.equal(route.effort, "low");
+    assert.equal(route.grade, 1);
+    assert.equal(route.effort, "none");
 
     const response = await fetch(`http://127.0.0.1:${port}/responses`, {
       method: "POST",
@@ -369,9 +369,9 @@ test("promotes a non-trivial grader grade 1 to low in hook and model routing", a
       }),
     });
     assert.equal(response.status, 200);
-    assert.equal(response.headers.get("x-promptrail-grade"), "2");
-    assert.equal(response.headers.get("x-promptrail-effort"), "low");
-    assert.equal(upstreamBodies[0].reasoning.effort, "low");
+    assert.equal(response.headers.get("x-promptrail-grade"), "1");
+    assert.equal(response.headers.get("x-promptrail-effort"), "none");
+    assert.equal(upstreamBodies[0].reasoning.effort, "none");
   } finally {
     await close(server);
   }

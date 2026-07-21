@@ -5,11 +5,11 @@ PromptRail Plugins route reasoning effort without moving provider inference to P
 ## Data sent to PromptRail
 
 The `UserPromptSubmit` hook sends the latest user-submitted prompt to PromptRail's hosted routing
-service. PromptRail uses it to select an effort grade. Codex proxy routing may also send the
-immediately previous user prompt and the previous assistant reasoning summary when Codex includes
-them in the model request. It does not send the assistant's full response. Codex routing requests
-include the selected Codex model identifier. Claude routing requests do not send the Claude session
-ID or model identifier to the hosted routing service.
+service. PromptRail uses it to select a model and effort grade. Codex and Claude proxy routing also
+send the immediately previous user prompt, up to 2,000 characters of the previous assistant summary
+or text response, and the current model identifier when those values are available. They do not
+send the complete assistant response. Claude routing requests do not send the Claude session ID to
+the hosted routing service.
 
 The hook also sends a PromptRail access token. Claude Code routing uses the local Claude session ID
 only to match a hook decision with local model requests.
@@ -18,7 +18,8 @@ only to match a hook decision with local model requests.
 
 The local proxy forwards provider requests from the user's machine directly to OpenAI or Anthropic.
 PromptRail does not receive provider OAuth tokens, provider account identifiers, system prompts,
-developer instructions, full transcripts, attachments, tool definitions, or model responses.
+developer instructions, full transcripts, attachments, tool definitions, or complete model
+responses beyond the bounded previous-assistant context described above.
 
 The client does not log prompts or provider credentials. Operational logs contain only grade,
 effort, and routing latency.

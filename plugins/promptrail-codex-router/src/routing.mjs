@@ -24,15 +24,10 @@ function isCodexImageEnvelope(text) {
   return text === "</image>" || /^<image(?:\s[^>]*)?>$/.test(text);
 }
 
-const NONE_MAX_CHARACTERS = 80;
-const NONE_MAX_WORDS = 12;
 const MAX_ASSISTANT_CONTEXT_CHARACTERS = 2_000;
 export const FIRST_TURN_USER_CONTEXT = "No previous user prompt; this is the first turn.";
 export const FIRST_TURN_ASSISTANT_CONTEXT =
   "No previous assistant response; this is the first turn.";
-const NON_TRIVIAL_PROMPT_PATTERN =
-  /(?:```|https?:\/\/|(?:^|[\s`"'(])(?:\.{0,2}\/)?[\w.-]+\/[\w./-]+|[$>#]\s|(?:^|\s)--[\w-]+|[{}[\]();]|(?:\b(?:add|analy[sz]e|build|change|check|compare|configure|create|debug|deploy|design|edit|explain|find|fix|implement|install|investigate|look up|modify|optimi[sz]e|plan|refactor|research|review|route|run|search|summari[sz]e|test|update|verify|why)\b))/i;
-
 function textFromContent(content) {
   if (typeof content === "string") {
     return content.trim();
@@ -278,18 +273,9 @@ export function extractPreviousTurnContext(body) {
   };
 }
 
-export function isEligibleForNone(prompt) {
-  const text = String(prompt || "").trim();
-  if (!text || text.length > NONE_MAX_CHARACTERS || text.includes("\n")) {
-    return false;
-  }
-  const words = text.match(/\b[\p{L}\p{N}'-]+\b/gu) || [];
-  return words.length <= NONE_MAX_WORDS && !NON_TRIVIAL_PROMPT_PATTERN.test(text);
-}
-
-export function normalizeGradeForPrompt(grade, prompt) {
+export function normalizeGradeForPrompt(grade) {
   effortForGrade(grade);
-  return grade === 1 && !isEligibleForNone(prompt) ? 2 : grade;
+  return grade;
 }
 
 export function effortForGrade(grade) {

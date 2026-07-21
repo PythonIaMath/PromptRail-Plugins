@@ -7,8 +7,9 @@ users already have.
 loopback-only proxy applies that grade to the outgoing model request while preserving the user's
 existing ChatGPT or claude.ai authentication.
 
-This repository contains only the client integrations. PromptRail's hosted routing service,
-classification technology, evaluation data, and infrastructure are not part of this repository.
+This repository contains the client integrations plus the self-hosted model-and-thinking router,
+its prompt-optimization workflow, and reproducible routing-quality evaluations. Customer account
+services and production infrastructure remain separate from this repository.
 
 ## Plugins
 
@@ -136,6 +137,15 @@ Run every client test:
 ```bash
 npm test
 ```
+
+Run the model-and-thinking router tests:
+
+```bash
+python3 -m pytest workers/model-thinking-router/tests -q
+```
+
+See the [router worker guide](workers/model-thinking-router/README.md) for its architecture,
+deployment, benchmarks, and prompt-optimization workflow.
 
 Validate the Codex plugin:
 

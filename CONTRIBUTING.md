@@ -32,11 +32,9 @@ Publishing is automated through the existing `NPM_TOKEN` GitHub Actions secret. 
 is merged to `main`, the release workflow creates the release pull request; merging that release
 pull request publishes the package to npm.
 
-After that, merge the Changesets release pull request on `main`. The release workflow uses GitHub
-OIDC to publish without storing an npm token in GitHub Secrets.
-
-Keep pull requests scoped to the client integrations. Do not add hosted classifier code, model
-identifiers, routing prompts, evaluation data, credentials, or private infrastructure details.
+Keep pull requests scoped to the client integrations, model-and-thinking router, or its evaluation
+tooling. Router behavior changes should include regression tests and routing-quality evidence. Do
+not add credentials, customer data, generated evaluation runs, or private infrastructure details.
 
 Bug fixes should include a regression test. Never add real provider credentials or PromptRail
 access tokens to fixtures.

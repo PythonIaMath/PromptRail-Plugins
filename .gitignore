@@ -5,3 +5,4 @@ __pycache__/
 *.log
 .DS_Store
 .dmux/
+workers/model-thinking-router/optimization_runs/
