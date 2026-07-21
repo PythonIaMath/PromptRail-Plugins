@@ -121,6 +121,22 @@ class RouterCoreTest(unittest.TestCase):
         with self.assertRaises(router_core.RouteValidationError):
             router_core.parse_model_list("small,large", router_core.DEFAULT_MODEL_MAP["codex"])
 
+    def test_selects_direct_grade_for_model_tier_without_arithmetic(self) -> None:
+        grades = (5, 4, 3)
+        self.assertEqual(router_core.select_tier_grade("codex", 1, grades), 5)
+        self.assertEqual(router_core.select_tier_grade("codex", 2, grades), 4)
+        self.assertEqual(router_core.select_tier_grade("codex", 3, grades), 3)
+
+    def test_tier_grade_selection_rejects_invalid_contracts(self) -> None:
+        for difficulty in (True, 0, 4, "1"):
+            with self.subTest(difficulty=difficulty):
+                with self.assertRaises(router_core.RouteValidationError):
+                    router_core.select_tier_grade("codex", difficulty, (3, 2, 1))
+        with self.assertRaises(router_core.RouteValidationError):
+            router_core.validate_tier_grades("codex", (1, 2))
+        with self.assertRaises(router_core.RouteValidationError):
+            router_core.validate_tier_grades("claude", (1, 2, 6))
+
     def test_build_route_combines_independent_layers(self) -> None:
         result = router_core.build_route(
             client="codex",
@@ -131,8 +147,7 @@ class RouterCoreTest(unittest.TestCase):
                 latency_ms=8.4,
             ),
             thinking_decision=router_core.ThinkingDecision(
-                grade=5,
-                effort="xhigh",
+                tier_grades=(6, 5, 4),
                 latency_ms=11.2,
             ),
             model_map=router_core.DEFAULT_MODEL_MAP,
@@ -140,8 +155,29 @@ class RouterCoreTest(unittest.TestCase):
         )
         self.assertEqual(result["model"], "gpt-5.6-sol")
         self.assertEqual(result["difficulty_label"], "complex")
-        self.assertEqual(result["effort"], "xhigh")
+        self.assertEqual(result["effort"], "high")
+        self.assertEqual(result["thinking_grades_by_tier"], {"1": 6, "2": 5, "3": 4})
         self.assertEqual(result["router"]["execution"], "parallel")
+
+    def test_build_route_uses_tier_grade_directly(self) -> None:
+        result = router_core.build_route(
+            client="codex",
+            prompt="Implement a bounded parser.",
+            model_decision=router_core.ModelDecision(
+                difficulty=1,
+                raw_output="1",
+                latency_ms=4.2,
+            ),
+            thinking_decision=router_core.ThinkingDecision(
+                tier_grades=(1, 3, 4),
+                latency_ms=7.5,
+            ),
+            model_map=router_core.DEFAULT_MODEL_MAP,
+            total_latency_ms=8.1,
+        )
+        self.assertEqual(result["model"], "gpt-5.6-luna")
+        self.assertEqual(result["thinking_grade"], 1)
+        self.assertEqual(result["effort"], "none")
 
     def test_claude_effort_contract_has_five_levels(self) -> None:
         with self.assertRaises(router_core.RouteValidationError):

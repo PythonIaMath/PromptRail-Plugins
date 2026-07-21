@@ -7,7 +7,6 @@ import {
   extractLatestUserPrompt,
   extractPreviousTurnContext,
   extractPreviousTurnContextFromTranscript,
-  isEligibleForNone,
   normalizeGradeForPrompt,
   thinkingLevelForEffort,
 } from "../../plugins/promptrail-codex-router/src/routing.mjs";
@@ -25,29 +24,10 @@ test("rejects grades outside the six-grade contract", () => {
   assert.throws(() => effortForGrade(2.5), /integer grade from 1 through 6/);
 });
 
-test("reserves none for short self-contained trivial prompts", () => {
-  for (const prompt of ["Hi", "Thanks!", "What is 2 + 2?", "Say hello."]) {
-    assert.equal(isEligibleForNone(prompt), true, prompt);
-    assert.equal(normalizeGradeForPrompt(1, prompt), 1, prompt);
+test("passes every valid router grade through without heuristic calibration", () => {
+  for (const grade of [1, 2, 3, 4, 5, 6]) {
+    assert.equal(normalizeGradeForPrompt(grade, "Fix the login bug"), grade);
   }
-
-  for (const prompt of [
-    "Fix the login bug",
-    "Explain why this code fails",
-    "Review src/router.mjs",
-    "Run the tests",
-    "Search for the latest React release",
-    "Design a lock-free queue.",
-    "Summarize this implementation and identify any concurrency risks.",
-  ]) {
-    assert.equal(isEligibleForNone(prompt), false, prompt);
-    assert.equal(normalizeGradeForPrompt(1, prompt), 2, prompt);
-  }
-});
-
-test("does not alter grades above none", () => {
-  assert.equal(normalizeGradeForPrompt(2, "Hi"), 2);
-  assert.equal(normalizeGradeForPrompt(6, "Hi"), 6);
 });
 
 test("formats the six visible thinking levels", () => {
