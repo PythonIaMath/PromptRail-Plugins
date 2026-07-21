@@ -10,8 +10,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from openai import OpenAI
-
 from prompt_optimization_article import ARTICLE_TEXT
 from prompt_optimization_cases import build_optimization_cases
 from quality_eval import BOUNDARY_CASES, QUALITY_CASES
@@ -178,7 +176,7 @@ GENERATION_LANES = (
 )
 
 
-def generate_candidates(client: OpenAI, usage: UsageCounter) -> list[dict[str, str]]:
+def generate_candidates(client: Any, usage: UsageCounter) -> list[dict[str, str]]:
     candidates: list[dict[str, str]] = []
     for lane_name, lane_instruction in GENERATION_LANES:
         response = client.responses.create(
@@ -242,7 +240,7 @@ def deduplicate_cases(candidates: list[dict[str, str]], count: int) -> tuple[OOD
     return tuple(accepted)
 
 
-def judge_case(client: OpenAI, usage: UsageCounter, case: OODCase) -> OODLabel:
+def judge_case(client: Any, usage: UsageCounter, case: OODCase) -> OODLabel:
     instructions = f"""
 You are Terra running at medium reasoning. Produce the frozen reference routing labels for a blind
 evaluation case. You cannot see and must not speculate about the router's output.
@@ -281,7 +279,7 @@ ARTICLE:
 
 
 def label_cases(
-    client: OpenAI,
+    client: Any,
     usage: UsageCounter,
     cases: tuple[OODCase, ...],
 ) -> dict[str, OODLabel]:
@@ -412,6 +410,13 @@ def run_blind_ood_eval(*, count: int, app_name: str) -> dict[str, Any]:
     if count < 12 or count > 60:
         raise ValueError("count must be between 12 and 60")
     api_key = os.environ["OPENAI_API_KEY"]
+    try:
+        from openai import OpenAI
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "Blind OOD generation requires the optional openai dependency. "
+            "Install requirements-prompt-optimization.txt before running it."
+        ) from exc
     client = OpenAI(api_key=api_key)
     usage = UsageCounter()
     candidates = generate_candidates(client, usage)

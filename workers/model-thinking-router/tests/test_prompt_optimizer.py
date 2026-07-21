@@ -100,17 +100,16 @@ class PromptOptimizerTest(unittest.TestCase):
 
     def test_terra_judge_receives_article_and_uses_medium_reasoning(self) -> None:
         fake_client = FakeOpenAIClient()
-        with patch("openai.OpenAI", return_value=fake_client):
-            judge = optimizer.TerraJudge(model="gpt-5.6-terra", api_key="test-key")
-            case = cases_module.build_optimization_cases()[0]
-            judgment = judge.judge(
-                case,
-                {
-                    "gemma_difficulty": 1,
-                    "arch_codex_tier_grades": {"1": 3, "2": 2, "3": 1},
-                    "arch_claude_tier_grades": {"1": 2, "2": 1, "3": 1},
-                },
-            )
+        judge = optimizer.TerraJudge(model="gpt-5.6-terra", client=fake_client)
+        case = cases_module.build_optimization_cases()[0]
+        judgment = judge.judge(
+            case,
+            {
+                "gemma_difficulty": 1,
+                "arch_codex_tier_grades": {"1": 3, "2": 2, "3": 1},
+                "arch_claude_tier_grades": {"1": 2, "2": 1, "3": 1},
+            },
+        )
 
         self.assertEqual(judgment.codex_tier_grades, (1, 1, 1))
         call = fake_client.responses.calls[0]

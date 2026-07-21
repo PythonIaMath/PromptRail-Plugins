@@ -128,12 +128,20 @@ class RoutingJudgment:
 
 
 class TerraJudge:
-    def __init__(self, *, model: str = DEFAULT_JUDGE_MODEL, api_key: str | None = None) -> None:
-        from openai import OpenAI
+    def __init__(
+        self,
+        *,
+        model: str = DEFAULT_JUDGE_MODEL,
+        api_key: str | None = None,
+        client: Any | None = None,
+    ) -> None:
+        if client is None:
+            from openai import OpenAI
 
-        resolved_key = resolve_api_key(api_key=api_key)
+            resolved_key = resolve_api_key(api_key=api_key)
+            client = OpenAI(api_key=resolved_key)
         self.model = model
-        self.client = OpenAI(api_key=resolved_key)
+        self.client = client
         self.article = ARTICLE_PATH.read_text()
         self._usage_lock = threading.Lock()
         self.usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
