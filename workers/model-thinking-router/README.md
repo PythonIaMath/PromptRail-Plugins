@@ -157,8 +157,9 @@ includes explicit context-switch cases so a trivial latest request does not inhe
 of an unrelated previous task.
 
 Terra at medium reasoning independently labels model difficulty and the final Codex and Claude
-thinking grade for each model tier. It receives the supplied model-selection article and the current Gemma and
-ArchRouter outputs. Labels and API usage are cached after every case so an interrupted run can
+thinking grade for each model tier. It receives the supplied
+[model-selection article](prompt_optimization_article.md) and the current Gemma and ArchRouter
+outputs. Labels and API usage are cached after every case so an interrupted run can
 resume without paying to judge completed examples again. GEPA then evolves the Gemma system prompt
 and ArchRouter prompt template separately. It gets a default budget of 200 metric calls and eight
 reflection proposals per selector.
