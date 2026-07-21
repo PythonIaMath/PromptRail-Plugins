@@ -3,7 +3,7 @@
 Open-source model and reasoning-effort routing for Codex and Claude Code, using the subscriptions
 users already have.
 
-[PromptRail](https://promptrail.ai) classifies each submitted prompt into an effort grade. A
+[PromptRail](https://www.promptrail.ai/plugins) classifies each submitted prompt into an effort grade. A
 loopback-only proxy applies that grade to the outgoing model request while preserving the user's
 existing ChatGPT or claude.ai authentication.
 
