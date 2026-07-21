@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+### Minor Changes
+
+- db27bc1: Route Codex and Claude requests through the new parallel Gemma and ArchRouter stack. The router now selects model family and model-specific thinking grade independently, applies the server grade directly without client-side arithmetic or grade coercion, preserves bounded prior-turn context, and includes reproducible prompt-optimization and blind routing-quality evaluation tooling.
+
 ## 1.3.6
 
 ### Patch Changes
