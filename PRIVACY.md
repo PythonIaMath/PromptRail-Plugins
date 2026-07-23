@@ -2,6 +2,13 @@
 
 PromptRail Plugins route reasoning effort without moving provider inference to PromptRail billing.
 
+## Infinite configuration preview
+
+The Phase 1 Infinite installer writes only provider endpoint and model configuration. It does not
+start a local proxy and does not store `PROMPTRAIL_API_KEY`; users must supply that key through a
+user-controlled environment or future secure key helper. The hosted Infinite inference service is
+not enabled by this release. Its production privacy disclosure will be published before beta.
+
 ## Data sent to PromptRail
 
 The `UserPromptSubmit` hook sends the latest user-submitted prompt to PromptRail's hosted routing

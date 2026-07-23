@@ -7,9 +7,13 @@ import { join } from "node:path";
 
 import {
   installCodexConfig,
+  installInfiniteCodexConfig,
   patchCodexConfig,
+  patchInfiniteCodexConfig,
   uninstallCodexConfig,
+  uninstallInfiniteCodexConfig,
   unpatchCodexConfig,
+  unpatchInfiniteCodexConfig,
 } from "../../lib/codex-config.mjs";
 
 test("configures PromptRail as the default provider", () => {
@@ -38,6 +42,57 @@ test("refuses to overwrite an existing PromptRail provider", () => {
     () => patchCodexConfig("[model_providers.promptrail]\nbase_url = \"http://other\"\n"),
     /refusing to overwrite/,
   );
+});
+
+test("requires an explicit switch before changing PromptRail modes", () => {
+  assert.throws(
+    () => patchInfiniteCodexConfig("[model_providers.promptrail]\nbase_url = \"http://127.0.0.1\"\n"),
+    /switch infinite/,
+  );
+  assert.throws(
+    () => patchCodexConfig("[model_providers.promptrail-infinite]\nbase_url = \"https://api.promptrail.ai\"\n"),
+    /switch plugins/,
+  );
+});
+
+test("generates a standalone PromptRail Infinite Responses provider", () => {
+  const patched = patchInfiniteCodexConfig('model = "gpt-5.6-sol"\n');
+  assert.match(patched, /^model_provider = "promptrail-infinite"/);
+  assert.match(patched, /^model = "promptrail\/infinite"/m);
+  assert.match(patched, /\[model_providers\.promptrail-infinite\]/);
+  assert.match(patched, /base_url = "https:\/\/api\.promptrail\.ai\/v1"/);
+  assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
+  assert.match(patched, /requires_openai_auth = false/);
+  assert.match(patched, /wire_api = "responses"/);
+  assert.doesNotMatch(patched, /127\.0\.0\.1|model_catalog_json/);
+});
+
+test("removes only managed Infinite Codex settings after a user edit", () => {
+  const original = 'model_provider = "openai"\nmodel = "gpt-5.6-sol"\n';
+  const patched = patchInfiniteCodexConfig(original).replace(
+    "# <<< promptrail-infinite provider <<<",
+    '[profiles.local]\nmodel = "user-model"\n\n# <<< promptrail-infinite provider <<<',
+  );
+  const restored = unpatchInfiniteCodexConfig(patched, original);
+  assert.match(restored, /^model_provider = "openai"/);
+  assert.match(restored, /^model = "gpt-5\.6-sol"/m);
+  assert.match(restored, /\[profiles\.local\]\nmodel = "user-model"/);
+  assert.doesNotMatch(restored, /promptrail-infinite/);
+});
+
+test("restores the original config when Infinite is uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-codex-"));
+  const configPath = join(directory, "config.toml");
+  const statePath = join(directory, "install-state.json");
+  const original = 'model_provider = "openai"\n';
+  await writeFile(configPath, original);
+  try {
+    await installInfiniteCodexConfig(configPath, statePath);
+    await uninstallInfiniteCodexConfig(statePath);
+    assert.equal(await readFile(configPath, "utf8"), original);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("removes only managed Codex config while preserving post-install changes", () => {

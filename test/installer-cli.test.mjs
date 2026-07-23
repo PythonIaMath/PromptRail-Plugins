@@ -18,13 +18,30 @@ function outputBuffer() {
 }
 
 test("defaults every top-level install invocation to both clients", () => {
-  assert.deepEqual(parseCliArgs([]), { command: "install", target: "both", options: {} });
-  assert.deepEqual(parseCliArgs(["install"]), { command: "install", target: "both", options: {} });
+  assert.deepEqual(parseCliArgs([]), { command: "install", mode: "plugins", target: "both", options: {} });
+  assert.deepEqual(parseCliArgs(["install"]), { command: "install", mode: "plugins", target: "both", options: {} });
   assert.deepEqual(parseCliArgs(["install", "both"]), {
     command: "install",
+    mode: "plugins",
     target: "both",
     options: {},
   });
+});
+
+test("parses explicit Infinite installs and safe mode switches", () => {
+  assert.deepEqual(parseCliArgs(["install", "infinite", "both"]), {
+    command: "install",
+    mode: "infinite",
+    target: "both",
+    options: {},
+  });
+  assert.deepEqual(parseCliArgs(["switch", "infinite"]), {
+    command: "switch",
+    mode: "infinite",
+    target: "both",
+    options: {},
+  });
+  assert.throws(() => parseCliArgs(["switch", "both"]), /Switch requires exactly one mode/);
 });
 
 test("rejects unknown targets and options instead of guessing", () => {
@@ -94,7 +111,7 @@ test("prints help without starting a child installer", async () => {
 
   assert.equal(status, 0);
   assert.equal(spawned, false);
-  assert.match(output.value(), /promptrail install both/);
+  assert.match(output.value(), /promptrail install \[plugins\] both/);
 });
 
 test("installs both client routers with one shared token", async () => {
@@ -122,4 +139,53 @@ test("installs both client routers with one shared token", async () => {
   }
   assert.equal(calls[0].options.env.PROMPTRAIL_GRADER_URL, DEFAULT_GRADER_URLS.codex);
   assert.equal(calls[1].options.env.PROMPTRAIL_GRADER_URL, DEFAULT_GRADER_URLS.claude);
+});
+
+test("installs Infinite without passing its API key to child commands or local proxies", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: ["install", "infinite", "both"],
+    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    spawn(command, args, options) {
+      calls.push({ command, args, options });
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].args[0], /promptrail-infinite-codex\.mjs$/);
+  assert.match(calls[1].args[0], /promptrail-infinite-claude\.mjs$/);
+  for (const call of calls) {
+    assert.deepEqual(call.args.slice(1), ["install"]);
+    assert.equal(call.options.env.PROMPTRAIL_ROUTER_TOKEN, undefined);
+    assert.equal(call.options.env.PROMPTRAIL_GRADER_URL, undefined);
+    assert.doesNotMatch(call.args.join(" "), /infinite-secret/);
+  }
+});
+
+test("switches by uninstalling the previous mode before installing the selected mode", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: ["switch", "infinite"],
+    env: {},
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    spawn(command, args) {
+      calls.push({ command, args });
+      return { status: 0 };
+    },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls.map((call) => call.args.slice(1)), [
+    ["uninstall"], ["uninstall"], ["install"], ["install"],
+  ]);
+  assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
+  assert.match(calls[2].args[0], /promptrail-infinite-codex\.mjs$/);
 });

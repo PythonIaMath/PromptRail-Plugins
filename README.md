@@ -1,4 +1,4 @@
-# PromptRail Plugins
+# PromptRail Plugins and Infinite
 
 Open-source model and reasoning-effort routing for Codex and Claude Code, using the subscriptions
 users already have.
@@ -10,6 +10,16 @@ existing ChatGPT or claude.ai authentication.
 This repository contains the client integrations plus the self-hosted model-and-thinking router,
 its prompt-optimization workflow, and reproducible routing-quality evaluations. Customer account
 services and production infrastructure remain separate from this repository.
+
+## Product modes
+
+`plugins` is the existing product: it keeps provider inference on the user's machine through a
+loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the default mode.
+
+`infinite` is the future hosted PromptRail provider mode. Phase 1 provides only safe local
+configuration generation; it does not enable or advertise live Infinite inference. It uses the
+single virtual model name `promptrail/infinite`, never starts the existing local proxy, and never
+writes `PROMPTRAIL_API_KEY` to a project or configuration file.
 
 ## Plugins
 
@@ -33,7 +43,7 @@ Do not use `npm i @promptrail/plugins` as the setup command. npm runs dependency
 without a reliable interactive terminal, so it cannot safely request the access token. Use the
 `npx` command above, which opens the secure token prompt directly.
 
-This is equivalent to `npx @promptrail/plugins install both`. The installer asks for your token
+This is equivalent to `npx @promptrail/plugins install plugins both`. The installer asks for your token
 without echoing it. For automated installs:
 
 ```bash
@@ -47,6 +57,26 @@ Check or remove an installation with `status` or `uninstall`:
 npx @promptrail/plugins status both
 npx @promptrail/plugins uninstall both
 ```
+
+## Infinite configuration preview
+
+When Infinite access is available, its separate configuration can be generated explicitly:
+
+```bash
+npx @promptrail/plugins install infinite both
+```
+
+This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
+Code with the PromptRail base URL and model. Set `PROMPTRAIL_API_KEY` in your user environment;
+the installer does not store it. Switching modes is explicit and first restores the other mode's
+managed settings:
+
+```bash
+npx @promptrail/plugins switch plugins
+npx @promptrail/plugins switch infinite
+```
+
+Do not use Infinite for real inference until the hosted service and entitlement are released.
 
 ## Before installing
 

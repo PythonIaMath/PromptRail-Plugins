@@ -6,8 +6,11 @@ import test from "node:test";
 
 import {
   installClaudeSettings,
+  installInfiniteClaudeSettings,
   patchClaudeSettings,
+  patchInfiniteClaudeSettings,
   uninstallClaudeSettings,
+  uninstallInfiniteClaudeSettings,
 } from "../../lib/claude-settings.mjs";
 
 const CLEAN_ENVIRONMENT = {
@@ -53,6 +56,43 @@ test("refuses API credentials and existing gateways", () => {
     ),
     /refusing to replace/,
   );
+});
+
+test("generates an Infinite Claude configuration without storing a PromptRail key", () => {
+  const patched = JSON.parse(patchInfiniteClaudeSettings(
+    JSON.stringify({ theme: "dark", env: { KEEP_ME: "yes" } }),
+  ));
+  assert.equal(patched.theme, "dark");
+  assert.equal(patched.env.KEEP_ME, "yes");
+  assert.equal(patched.env.ANTHROPIC_BASE_URL, "https://api.promptrail.ai");
+  assert.equal(patched.env.ANTHROPIC_MODEL, "promptrail/infinite");
+  assert.doesNotMatch(JSON.stringify(patched), /PROMPTRAIL_API_KEY|infinite-secret/);
+});
+
+test("refuses to replace an unrelated Claude model or gateway for Infinite", () => {
+  assert.throws(
+    () => patchInfiniteClaudeSettings(JSON.stringify({ env: { ANTHROPIC_MODEL: "other" } })),
+    /ANTHROPIC_MODEL is already configured/,
+  );
+  assert.throws(
+    () => patchInfiniteClaudeSettings(JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://other" } })),
+    /ANTHROPIC_BASE_URL is already configured/,
+  );
+});
+
+test("restores the original Claude settings when Infinite is uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-"));
+  const settingsPath = join(directory, "settings.json");
+  const statePath = join(directory, "install-state.json");
+  const original = '{\n  "theme": "dark"\n}\n';
+  await writeFile(settingsPath, original);
+  try {
+    await installInfiniteClaudeSettings({ path: settingsPath, statePath });
+    await uninstallInfiniteClaudeSettings(statePath);
+    assert.equal(await readFile(settingsPath, "utf8"), original);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("restores the exact original Claude settings on uninstall", async () => {
