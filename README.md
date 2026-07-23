@@ -86,7 +86,7 @@ Check status:
 node bin/promptrail-codex-router.mjs status
 ```
 
-Uninstall and restore the previous Codex configuration:
+Uninstall PromptRail and restore its previous Codex values while preserving unrelated changes:
 
 ```bash
 node bin/promptrail-codex-router.mjs uninstall
@@ -120,7 +120,7 @@ Check status:
 node bin/promptrail-claude-router.mjs status
 ```
 
-Uninstall and restore the previous Claude settings:
+Uninstall PromptRail and restore its previous Claude values while preserving unrelated changes:
 
 ```bash
 node bin/promptrail-claude-router.mjs uninstall

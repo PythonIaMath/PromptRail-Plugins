@@ -78,6 +78,28 @@ function installedPluginRoot() {
   return plugin.installPath;
 }
 
+function hasInstalledPlugin() {
+  const plugins = runJson(claudeBinary(), ["plugin", "list", "--json"]);
+  return plugins.some((entry) => entry.id === "promptrail-claude-router@promptrail");
+}
+
+function hasPromptRailMarketplace() {
+  const marketplaces = runJson(claudeBinary(), ["plugin", "marketplace", "list", "--json"]);
+  return marketplaces.some((entry) => entry.name === "promptrail");
+}
+
+async function unlinkIfExists(path) {
+  try {
+    await unlink(path);
+    return true;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function install() {
   const graderUrl = option("--grader-url") || process.env.PROMPTRAIL_GRADER_URL;
   const routerToken = option("--token") || process.env.PROMPTRAIL_ROUTER_TOKEN;
@@ -143,19 +165,68 @@ async function status() {
 }
 
 async function uninstall() {
-  const settingsPath = await uninstallClaudeSettings();
-  if (!settingsPath) {
+  const failures = [];
+  const attempt = async (label, operation) => {
+    try {
+      return await operation();
+    } catch (error) {
+      failures.push(`${label}: ${error.message}`);
+      return false;
+    }
+  };
+
+  const settingsPath = await attempt("restore Claude settings", () => uninstallClaudeSettings());
+  const serviceRemoved = await attempt("remove the Claude router service", uninstallUserService);
+  let pluginRemoved = false;
+  let marketplaceRemoved = false;
+  if (!process.argv.includes("--skip-plugin-remove")) {
+    pluginRemoved = await attempt("remove the Claude plugin", () => {
+      if (!hasInstalledPlugin()) {
+        return false;
+      }
+      run(claudeBinary(), [
+        "plugin",
+        "uninstall",
+        "promptrail-claude-router@promptrail",
+        "--scope",
+        "user",
+      ]);
+      return true;
+    });
+    marketplaceRemoved = await attempt("remove the PromptRail marketplace", () => {
+      if (!hasPromptRailMarketplace()) {
+        return false;
+      }
+      run(claudeBinary(), ["plugin", "marketplace", "remove", "promptrail"]);
+      return true;
+    });
+  }
+  const configRemoved = await attempt("remove the Claude router credential", () => (
+    unlinkIfExists(routerConfigPath())
+  ));
+  let stateRemoved = false;
+  if (failures.length === 0) {
+    stateRemoved = await attempt("remove the Claude install state", () => (
+      unlinkIfExists(installStatePath())
+    ));
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`PromptRail Claude uninstall was incomplete:\n- ${failures.join("\n- ")}`);
+  }
+  if (
+    !settingsPath
+    && !serviceRemoved
+    && !pluginRemoved
+    && !marketplaceRemoved
+    && !configRemoved
+    && !stateRemoved
+  ) {
     process.stdout.write("PromptRail Claude router is not installed.\n");
     return;
   }
-  await uninstallUserService();
-  if (!process.argv.includes("--skip-plugin-remove")) {
-    run(claudeBinary(), ["plugin", "uninstall", "promptrail-claude-router@promptrail", "--scope", "user"]);
-  }
-  await unlink(routerConfigPath());
-  await unlink(installStatePath());
   process.stdout.write(
-    `Restored Claude settings at ${settingsPath} and removed the local router credential.\n`,
+    `${settingsPath ? `Restored Claude settings at ${settingsPath}` : "Removed PromptRail Claude artifacts"} and removed the local router credential.\n`,
   );
 }
 
