@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { installClaudeSettings } from "../../lib/claude-settings.mjs";
+import { fakeUserServiceManagers } from "../../test-support/fake-user-service-managers.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const routerBin = join(repositoryRoot, "bin", "promptrail-claude-router.mjs");
@@ -75,10 +76,12 @@ async function fixture() {
   const pluginMarker = join(directory, "plugin-installed");
   const marketplaceMarker = join(directory, "marketplace-installed");
   const logPath = join(directory, "claude.log");
+  const serviceManagers = await fakeUserServiceManagers(directory, process.env.PATH);
   const claudeBin = await fakeClaude(directory);
   const env = {
     ...process.env,
     HOME: directory,
+    PATH: serviceManagers.path,
     CLAUDE_BIN: claudeBin,
     CLAUDE_CONFIG_DIR: dirname(settingsPath),
     PROMPTRAIL_CLAUDE_ROUTER_HOME: routerHome,
@@ -86,6 +89,7 @@ async function fixture() {
     FAKE_CLAUDE_LOG: logPath,
     FAKE_CLAUDE_PLUGIN: pluginMarker,
     FAKE_CLAUDE_MARKETPLACE: marketplaceMarker,
+    FAKE_USER_SERVICE_MANAGER_LOG: serviceManagers.logPath,
   };
   await mkdir(dirname(settingsPath), { recursive: true });
   await mkdir(routerHome, { recursive: true });
@@ -100,6 +104,7 @@ async function fixture() {
     pluginMarker,
     marketplaceMarker,
     logPath,
+    serviceManagerLogPath: serviceManagers.logPath,
     env,
   };
 }
@@ -132,6 +137,7 @@ test("Claude uninstall preserves user settings and removes all PromptRail artifa
     assert.equal(await exists(values.marketplaceMarker), false);
     assert.equal(await exists(values.configPath), false);
     assert.equal(await exists(values.statePath), false);
+    assert.match(await readFile(values.serviceManagerLogPath, "utf8"), /bootout|disable/);
     const calls = (await readFile(values.logPath, "utf8"))
       .trim()
       .split("\n")
