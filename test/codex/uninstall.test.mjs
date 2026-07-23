@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { installCodexConfig } from "../../lib/codex-config.mjs";
+import { fakeUserServiceManagers } from "../../test-support/fake-user-service-managers.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const routerBin = join(repositoryRoot, "bin", "promptrail-codex-router.mjs");
@@ -78,10 +79,12 @@ async function fixture() {
   const pluginMarker = join(directory, "plugin-installed");
   const marketplaceMarker = join(directory, "marketplace-installed");
   const logPath = join(directory, "codex.log");
+  const serviceManagers = await fakeUserServiceManagers(directory, process.env.PATH);
   const codexBin = await fakeCodex(directory);
   const env = {
     ...process.env,
     HOME: directory,
+    PATH: serviceManagers.path,
     CODEX_BIN: codexBin,
     CODEX_HOME: codexHome,
     PROMPTRAIL_ROUTER_HOME: routerHome,
@@ -89,6 +92,7 @@ async function fixture() {
     FAKE_CODEX_LOG: logPath,
     FAKE_CODEX_PLUGIN: pluginMarker,
     FAKE_CODEX_MARKETPLACE: marketplaceMarker,
+    FAKE_USER_SERVICE_MANAGER_LOG: serviceManagers.logPath,
   };
   await mkdir(codexHome, { recursive: true });
   await mkdir(routerHome, { recursive: true });
@@ -103,6 +107,7 @@ async function fixture() {
     pluginMarker,
     marketplaceMarker,
     logPath,
+    serviceManagerLogPath: serviceManagers.logPath,
     env,
   };
 }
@@ -138,6 +143,7 @@ test("Codex uninstall preserves config changes and removes all PromptRail artifa
     assert.equal(await exists(values.routerConfigPath), false);
     assert.equal(await exists(values.modelCatalogPath), false);
     assert.equal(await exists(values.statePath), false);
+    assert.match(await readFile(values.serviceManagerLogPath, "utf8"), /bootout|disable/);
     const calls = (await readFile(values.logPath, "utf8"))
       .trim()
       .split("\n")
