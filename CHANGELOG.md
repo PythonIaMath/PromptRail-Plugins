@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2
+
+### Patch Changes
+
+- e075083: Prevent uninstall regression tests from calling the host machine's real launchd or systemd service manager. The test harness now isolates those commands so running the package test suite cannot stop an installed PromptRail router.
+
 ## 1.4.1
 
 ### Patch Changes
