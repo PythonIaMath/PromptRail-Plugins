@@ -28,6 +28,6 @@ effort, and routing latency.
 
 Router configuration is stored under `~/.codex/promptrail-router` or
 `~/.claude/promptrail-router` with user-only permissions. Uninstall removes the local router
-credential and restores the provider configuration when it is safe to do so.
+credential and PromptRail-owned client settings while preserving unrelated configuration changes.
 
 For privacy questions, contact [support@promptrail.ai](mailto:support@promptrail.ai).

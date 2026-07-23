@@ -17,7 +17,8 @@ include reproduction steps, affected versions, and impact.
 - Unsupported proxy paths are rejected.
 - Redirects are not followed automatically.
 - Configuration and install-state files use user-only permissions.
-- Uninstall refuses to overwrite provider configuration changed after installation.
+- Uninstall removes only PromptRail-owned configuration and preserves unrelated changes made after
+  installation.
 
 ## User responsibility
 
