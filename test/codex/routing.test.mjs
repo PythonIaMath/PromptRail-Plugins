@@ -7,7 +7,9 @@ import {
   extractLatestUserPrompt,
   extractPreviousTurnContext,
   extractPreviousTurnContextFromTranscript,
+  fallbackRoute,
   normalizeGradeForPrompt,
+  ROUTING_FALLBACK,
   thinkingLevelForEffort,
 } from "../../plugins/promptrail-codex-router/src/routing.mjs";
 import { buildModelCatalog } from "../../plugins/promptrail-codex-router/src/config.mjs";
@@ -35,6 +37,23 @@ test("formats the six visible thinking levels", () => {
     ["none", "low", "medium", "high", "xhigh", "max"].map(thinkingLevelForEffort),
     ["None", "Low", "Medium", "High", "Extra High", "Max"],
   );
+});
+
+test("defines Terra Medium as the routing-error fallback", () => {
+  assert.deepEqual(ROUTING_FALLBACK, {
+    grade: 3,
+    effort: "medium",
+    model: "gpt-5.6-terra",
+  });
+  assert.deepEqual(fallbackRoute(new Error("fetch failed")), {
+    ...ROUTING_FALLBACK,
+    fallback: true,
+    source: "terra_medium_fallback",
+    routingError: "fetch failed",
+    warning:
+      "PromptRail routing error (fetch failed). " +
+      "Falling back to Terra Medium; the request will continue.",
+  });
 });
 
 test("extracts only the latest user prompt from a Responses request", () => {
@@ -170,6 +189,35 @@ test("extracts the previous turn from a Codex JSONL transcript", () => {
     {
       previousUserPrompt: "Fix the race condition.",
       previousAssistantSummary: "Found unsafe shared mutation.",
+    },
+  );
+});
+
+test("extracts assistant context from Codex event envelopes", () => {
+  const transcript = [
+    JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "user_message",
+        role: "user",
+        content: [{ type: "input_text", text: "Find the cache race." }],
+      },
+    }),
+    JSON.stringify({
+      type: "event_msg",
+      payload: {
+        type: "assistant_message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "The worker mutates shared state without a lock." }],
+      },
+    }),
+  ].join("\n");
+
+  assert.deepEqual(
+    extractPreviousTurnContextFromTranscript(transcript, "Fix it."),
+    {
+      previousUserPrompt: "Find the cache race.",
+      previousAssistantSummary: "The worker mutates shared state without a lock.",
     },
   );
 });

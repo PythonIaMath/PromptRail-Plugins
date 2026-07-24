@@ -16,6 +16,32 @@ export const EFFORT_TO_THINKING_LEVEL = Object.freeze({
   max: "Max",
 });
 
+export const ROUTING_FALLBACK = Object.freeze({
+  grade: 3,
+  effort: "medium",
+  model: "gpt-5.6-terra",
+});
+
+function compactErrorMessage(error) {
+  const message = String(error?.message || error || "unknown routing error")
+    .replace(/\s+/g, " ")
+    .trim();
+  return message.slice(0, 500) || "unknown routing error";
+}
+
+export function fallbackRoute(error) {
+  const routingError = compactErrorMessage(error);
+  return {
+    ...ROUTING_FALLBACK,
+    fallback: true,
+    source: "terra_medium_fallback",
+    routingError,
+    warning:
+      `PromptRail routing error (${routingError}). ` +
+      "Falling back to Terra Medium; the request will continue.",
+  };
+}
+
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -94,8 +120,25 @@ function transcriptItem(record) {
   if (record.type === "response_item" && isObject(record.payload)) {
     return record.payload;
   }
+  if (record.type === "response_item" && isObject(record.item)) {
+    return record.item;
+  }
+  if (record.type === "response_item" && (record.role || record.content)) {
+    return record;
+  }
+  if (record.type === "event_msg" && isObject(record.payload)) {
+    if (isObject(record.payload.item)) {
+      return record.payload.item;
+    }
+    if (record.payload.role || record.payload.content) {
+      return record.payload;
+    }
+  }
   if (isObject(record.payload) && isObject(record.payload.payload)) {
     return record.payload.payload;
+  }
+  if (isObject(record.item)) {
+    return record.item;
   }
   return null;
 }

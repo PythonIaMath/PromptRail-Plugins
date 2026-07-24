@@ -18,8 +18,9 @@ services and production infrastructure remain separate from this repository.
 | Codex | 6 | ChatGPT |
 | Claude Code | 5 | claude.ai |
 
-Both integrations fail visibly when routing, authentication, or protocol validation fails. They
-do not silently select a default effort or switch to API billing.
+Codex routing failures are reported visibly and fail open to Terra Medium so the request can
+continue on the user's ChatGPT subscription. Claude Code still fails visibly when routing,
+authentication, or protocol validation fails. Neither integration switches to API billing.
 
 ## Quick install
 

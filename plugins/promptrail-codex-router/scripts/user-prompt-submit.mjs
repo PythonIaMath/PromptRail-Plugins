@@ -2,6 +2,7 @@ import { loadRouterConfig, routerConfigPath } from "../src/config.mjs";
 import { readFile } from "node:fs/promises";
 import {
   extractPreviousTurnContextFromTranscript,
+  fallbackRoute,
   FIRST_TURN_ASSISTANT_CONTEXT,
   FIRST_TURN_USER_CONTEXT,
 } from "../src/routing.mjs";
@@ -57,22 +58,37 @@ async function main() {
     throw new Error(`PromptRail local router returned HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
   }
   const route = await response.json();
-  const status = `Model_Selected: ${route.model} | Thinking_Level: ${route.effort}`;
+  const selectedModel = String(route?.model || "").trim();
+  const selectedEffort = String(route?.effort || "").trim();
+  if (!selectedModel || !selectedEffort) {
+    throw new TypeError("PromptRail local router returned an invalid route.");
+  }
+  const status = `Model_Selected: ${selectedModel} | Thinking_Level: ${selectedEffort}`;
+  const output = {
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: status,
+    },
+  };
+  if (route.warning) {
+    output.systemMessage = String(route.warning);
+  }
   process.stdout.write(
-    `${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "UserPromptSubmit",
-        additionalContext: status,
-      },
-    })}\n`,
+    `${JSON.stringify(output)}\n`,
   );
 }
 
 main().catch((error) => {
+  const route = fallbackRoute(error);
+  const status = `Model_Selected: ${route.model} | Thinking_Level: ${route.effort}`;
   process.stdout.write(
     `${JSON.stringify({
-      decision: "block",
-      reason: `Thinking level selection failed: ${error.message}`,
+      continue: true,
+      systemMessage: route.warning,
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: status,
+      },
     })}\n`,
   );
 });

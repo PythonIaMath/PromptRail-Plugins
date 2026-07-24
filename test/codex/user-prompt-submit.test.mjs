@@ -198,3 +198,106 @@ test("uses the previous turn from the Codex transcript for the visible route", a
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("prints the routing error and continues with Terra Medium when the hook fails", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-hook-fallback-"));
+  const configPath = join(directory, "config.json");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      graderUrl: "https://grader.test/grade",
+      routerToken: "router-secret",
+      host: "127.0.0.1",
+      port: 1,
+    }),
+  );
+
+  try {
+    const child = spawn(process.execPath, [HOOK_SCRIPT], {
+      env: { ...process.env, PROMPTRAIL_ROUTER_CONFIG: configPath },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdoutPromise = readStream(child.stdout);
+    const stderrPromise = readStream(child.stderr);
+    child.stdin.end(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "Review this queue design.",
+        model: "gpt-5.6-sol",
+      }),
+    );
+    const [exitCode] = await once(child, "close");
+    const payload = JSON.parse(await stdoutPromise);
+
+    assert.equal(exitCode, 0);
+    assert.equal(await stderrPromise, "");
+    assert.equal(payload.continue, true);
+    assert.match(payload.systemMessage, /PromptRail routing error/);
+    assert.match(payload.systemMessage, /Falling back to Terra Medium/);
+    assert.equal(payload.decision, undefined);
+    assert.deepEqual(payload.hookSpecificOutput, {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: "Model_Selected: gpt-5.6-terra | Thinking_Level: medium",
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("prints a proxy fallback warning without blocking the prompt", async () => {
+  const warning =
+    "PromptRail routing error (grader unavailable). " +
+    "Falling back to Terra Medium; the request will continue.";
+  const server = http.createServer((_request, response) => {
+    const payload = JSON.stringify({
+      grade: 3,
+      effort: "medium",
+      model: "gpt-5.6-terra",
+      fallback: true,
+      warning,
+    });
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "content-length": Buffer.byteLength(payload),
+    });
+    response.end(payload);
+  });
+  const port = await listen(server);
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-hook-proxy-fallback-"));
+  const configPath = join(directory, "config.json");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      graderUrl: "https://grader.test/grade",
+      routerToken: "router-secret",
+      host: "127.0.0.1",
+      port,
+    }),
+  );
+
+  try {
+    const child = spawn(process.execPath, [HOOK_SCRIPT], {
+      env: { ...process.env, PROMPTRAIL_ROUTER_CONFIG: configPath },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const stdoutPromise = readStream(child.stdout);
+    child.stdin.end(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        prompt: "Review this queue design.",
+        model: "gpt-5.6-sol",
+      }),
+    );
+    await once(child, "close");
+    const payload = JSON.parse(await stdoutPromise);
+    assert.equal(payload.systemMessage, warning);
+    assert.equal(payload.decision, undefined);
+    assert.deepEqual(payload.hookSpecificOutput, {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: "Model_Selected: gpt-5.6-terra | Thinking_Level: medium",
+    });
+  } finally {
+    await close(server);
+    await rm(directory, { recursive: true, force: true });
+  }
+});

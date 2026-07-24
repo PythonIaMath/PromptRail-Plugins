@@ -12,6 +12,7 @@ import {
   effortForGrade,
   extractLatestUserPrompt,
   extractPreviousTurnContext,
+  fallbackRoute,
   FIRST_TURN_ASSISTANT_CONTEXT,
   FIRST_TURN_USER_CONTEXT,
   normalizeGradeForPrompt,
@@ -121,6 +122,7 @@ async function pipeFetchResponse(upstream, response, route) {
   if (route) {
     headers["x-promptrail-grade"] = String(route.grade);
     headers["x-promptrail-effort"] = route.effort;
+    headers["x-promptrail-route-source"] = route.source;
   }
   response.writeHead(upstream.status, headers);
   if (!upstream.body) {
@@ -143,17 +145,31 @@ export function createProxyServer({
   logger = console,
 }) {
   async function selectRoute(prompt, model, context = {}) {
-    const graded = await gradePrompt({
-      graderUrl: config.graderUrl,
-      routerToken: config.routerToken,
-      prompt,
-      model,
-      ...context,
-      fetchImpl,
-    });
-    const grade = normalizeGradeForPrompt(graded.grade, prompt);
-    const route = { ...graded, grade, effort: effortForGrade(grade) };
-    return { ...route, source: "proxy_request" };
+    try {
+      const graded = await gradePrompt({
+        graderUrl: config.graderUrl,
+        routerToken: config.routerToken,
+        prompt,
+        model,
+        ...context,
+        fetchImpl,
+      });
+      const grade = normalizeGradeForPrompt(graded.grade, prompt);
+      const route = { ...graded, grade, effort: effortForGrade(grade) };
+      return { ...route, source: "proxy_request" };
+    } catch (error) {
+      const route = fallbackRoute(error);
+      logger.error?.(
+        JSON.stringify({
+          event: "promptrail_route_fallback",
+          error: route.routingError,
+          grade: route.grade,
+          effort: route.effort,
+          model: route.model,
+        }),
+      );
+      return route;
+    }
   }
 
   return http.createServer(async (request, response) => {
@@ -175,17 +191,10 @@ export function createProxyServer({
           previousUserPrompt,
           previousAssistantSummary,
         } = validateRouteInput(JSON.parse(await readRequestBody(request)));
-        const graded = await gradePrompt({
-          graderUrl: config.graderUrl,
-          routerToken: config.routerToken,
-          prompt,
-          model,
+        const route = await selectRoute(prompt, model, {
           previousUserPrompt,
           previousAssistantSummary,
-          fetchImpl,
         });
-        const grade = normalizeGradeForPrompt(graded.grade, prompt);
-        const route = { ...graded, grade, effort: effortForGrade(grade) };
         jsonResponse(response, 200, route);
         return;
       }

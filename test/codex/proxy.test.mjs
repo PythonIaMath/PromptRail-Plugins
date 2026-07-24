@@ -403,7 +403,7 @@ test("keeps grade 1 for a genuinely trivial prompt", async () => {
   }
 });
 
-test("does not call OpenAI when the grader violates the six-grade contract", async () => {
+test("returns Terra Medium when the grader violates the six-grade contract", async () => {
   let calls = 0;
   const server = createProxyServer({
     config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
@@ -426,9 +426,67 @@ test("does not call OpenAI when the grader violates the six-grade contract", asy
       },
       body: JSON.stringify({ prompt: "Design a lock-free queue.", model: "gpt-5.6-sol" }),
     });
-    assert.equal(response.status, 422);
-    assert.match((await response.json()).message, /integer from 1 through 6/);
+    assert.equal(response.status, 200);
+    const route = await response.json();
+    assert.equal(route.grade, 3);
+    assert.equal(route.effort, "medium");
+    assert.equal(route.model, "gpt-5.6-terra");
+    assert.equal(route.fallback, true);
+    assert.match(route.warning, /integer from 1 through 6/);
+    assert.match(route.warning, /Falling back to Terra Medium/);
     assert.equal(calls, 1);
+  } finally {
+    await close(server);
+  }
+});
+
+test("forwards the request with Terra Medium when the grader fetch fails", async () => {
+  const upstreamBodies = [];
+  const errors = [];
+  const server = createProxyServer({
+    config: { graderUrl: "https://grader.test/grade", routerToken: "router-secret" },
+    fetchImpl: async (url, options) => {
+      if (url === "https://grader.test/grade") {
+        throw new Error("fetch failed");
+      }
+      upstreamBodies.push(JSON.parse(options.body));
+      return new Response("ok", { status: 200 });
+    },
+    upstreamBaseUrl: "https://chatgpt.test/backend-api/codex",
+    logger: {
+      info() {},
+      error(message) {
+        errors.push(JSON.parse(message));
+      },
+    },
+  });
+  const port = await listen(server);
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/responses`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer subscription-secret",
+        "chatgpt-account-id": "account-123",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(requestBody()),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("x-promptrail-grade"), "3");
+    assert.equal(response.headers.get("x-promptrail-effort"), "medium");
+    assert.equal(response.headers.get("x-promptrail-route-source"), "terra_medium_fallback");
+    assert.equal(upstreamBodies.length, 1);
+    assert.equal(upstreamBodies[0].model, "gpt-5.6-terra");
+    assert.equal(upstreamBodies[0].reasoning.effort, "medium");
+    assert.deepEqual(errors, [
+      {
+        event: "promptrail_route_fallback",
+        error: "fetch failed",
+        grade: 3,
+        effort: "medium",
+        model: "gpt-5.6-terra",
+      },
+    ]);
   } finally {
     await close(server);
   }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.3
+
+### Patch Changes
+
+- Keep Codex requests running on Terra Medium when route selection fails, while printing a visible PromptRail routing warning.
+
 ## 1.4.2
 
 ### Patch Changes
