@@ -76,21 +76,21 @@ npx @promptrail/plugins switch plugins
 npx @promptrail/plugins switch infinite
 ```
 
-### VM beta
+### Portable local beta
 
-Start the private VM gateway with its protected connection catalog first. The gateway key and the
+Start the private local-beta gateway with its protected connection catalog first. The gateway key and the
 free-provider key are different secrets: Codex receives only the gateway key. Then configure an
 isolated Codex home for evaluation:
 
 ```bash
 export PROMPTRAIL_INFINITE_BASE_URL=http://127.0.0.1:8787/v1
-export PROMPTRAIL_API_KEY="$PROMPTRAIL_VM_API_KEY"
+export PROMPTRAIL_API_KEY="$PROMPTRAIL_BETA_API_KEY"
 export CODEX_HOME="$HOME/.codex-promptrail-infinite-beta"
 export PROMPTRAIL_INFINITE_HOME="$CODEX_HOME/promptrail-infinite"
 npx @promptrail/plugins switch infinite
 ```
 
-The override is only for a locally controlled VM beta. The normal default remains
+The override is only for a locally controlled beta gateway. The normal default remains
 `https://api.promptrail.ai/v1`, and the installer never writes the API key to Codex configuration.
 Keep the provider catalog and Codex OAuth file outside repositories with mode 0600 permissions.
 Existing Plugins users are never migrated automatically; switching back remains explicit:
