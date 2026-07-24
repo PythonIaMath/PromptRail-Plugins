@@ -41,7 +41,13 @@ test("parses explicit Infinite installs and safe mode switches", () => {
     target: "both",
     options: {},
   });
-  assert.throws(() => parseCliArgs(["switch", "both"]), /Switch requires exactly one mode/);
+  assert.deepEqual(parseCliArgs(["switch", "infinite", "codex"]), {
+    command: "switch",
+    mode: "infinite",
+    target: "codex",
+    options: {},
+  });
+  assert.throws(() => parseCliArgs(["switch", "both"]), /Switch requires a mode/);
 });
 
 test("rejects unknown targets and options instead of guessing", () => {
@@ -188,4 +194,24 @@ test("switches by uninstalling the previous mode before installing the selected 
   ]);
   assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
   assert.match(calls[2].args[0], /promptrail-infinite-codex\.mjs$/);
+});
+
+test("switches only the explicitly requested client", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: ["switch", "infinite", "codex"],
+    env: {},
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    spawn(command, args) {
+      calls.push({ command, args });
+      return { status: 0 };
+    },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls.map((call) => call.args.slice(1)), [["uninstall"], ["install"]]);
+  assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
+  assert.match(calls[1].args[0], /promptrail-infinite-codex\.mjs$/);
 });
