@@ -16,10 +16,10 @@ services and production infrastructure remain separate from this repository.
 `plugins` is the existing product: it keeps provider inference on the user's machine through a
 loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the default mode.
 
-`infinite` is the future hosted PromptRail provider mode. Phase 1 provides only safe local
-configuration generation; it does not enable or advertise live Infinite inference. It uses the
-single virtual model name `promptrail/infinite`, never starts the existing local proxy, and never
-writes `PROMPTRAIL_API_KEY` to a project or configuration file.
+`infinite` is the PromptRail provider mode. The public package provides safe configuration only;
+the current usable target is an explicitly configured local VM beta, not a public hosted production
+endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the existing
+Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
 
 ## Plugins
 
@@ -78,16 +78,26 @@ npx @promptrail/plugins switch infinite
 
 ### VM beta
 
-To use the local VM beta gateway, set its endpoint before installing Infinite:
+Start the private VM gateway with its protected connection catalog first. The gateway key and the
+free-provider key are different secrets: Codex receives only the gateway key. Then configure an
+isolated Codex home for evaluation:
 
 ```bash
 export PROMPTRAIL_INFINITE_BASE_URL=http://127.0.0.1:8787/v1
-export PROMPTRAIL_API_KEY='your PromptRail VM beta key'
+export PROMPTRAIL_API_KEY="$PROMPTRAIL_VM_API_KEY"
+export CODEX_HOME="$HOME/.codex-promptrail-infinite-beta"
+export PROMPTRAIL_INFINITE_HOME="$CODEX_HOME/promptrail-infinite"
 npx @promptrail/plugins switch infinite
 ```
 
 The override is only for a locally controlled VM beta. The normal default remains
 `https://api.promptrail.ai/v1`, and the installer never writes the API key to Codex configuration.
+Keep the provider catalog and Codex OAuth file outside repositories with mode 0600 permissions.
+Existing Plugins users are never migrated automatically; switching back remains explicit:
+
+```bash
+npx @promptrail/plugins switch plugins
+```
 
 ## Before installing
 
