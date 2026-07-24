@@ -68,7 +68,7 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.doesNotMatch(patched, /127\.0\.0\.1|model_catalog_json/);
 });
 
-test("accepts an explicit local VM beta endpoint without changing the hosted default", () => {
+test("accepts an explicit portable local beta endpoint without changing the hosted default", () => {
   const patched = patchInfiniteCodexConfig("", "http://127.0.0.1:8787/v1");
   assert.match(patched, /base_url = "http:\/\/127\.0\.0\.1:8787\/v1"/);
   assert.equal(infiniteBaseUrl("https://api.promptrail.ai/v1/"), "https://api.promptrail.ai/v1");

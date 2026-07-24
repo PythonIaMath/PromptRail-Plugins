@@ -17,7 +17,7 @@ services and production infrastructure remain separate from this repository.
 loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the default mode.
 
 `infinite` is the PromptRail provider mode. The public package provides safe configuration only;
-the current usable target is an explicitly configured local VM beta, not a public hosted production
+the current usable target is an explicitly configured portable local beta, not a public hosted production
 endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the existing
 Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
 
@@ -78,9 +78,10 @@ npx @promptrail/plugins switch infinite
 
 ### Portable local beta
 
-Start the private local-beta gateway with its protected connection catalog first. The gateway key and the
-free-provider key are different secrets: Codex receives only the gateway key. Then configure an
-isolated Codex home for evaluation:
+Start the private local-beta gateway with its protected connection catalog first. Its setup helper
+validates one exact zero-priced provider model and stores the provider key only in a mode-0600
+catalog outside the repository. The gateway key and free-provider key are different secrets: Codex
+receives only the gateway key. Then configure an isolated Codex home for evaluation:
 
 ```bash
 export PROMPTRAIL_INFINITE_BASE_URL=http://127.0.0.1:8787/v1
