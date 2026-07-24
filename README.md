@@ -76,7 +76,18 @@ npx @promptrail/plugins switch plugins
 npx @promptrail/plugins switch infinite
 ```
 
-Do not use Infinite for real inference until the hosted service and entitlement are released.
+### VM beta
+
+To use the local VM beta gateway, set its endpoint before installing Infinite:
+
+```bash
+export PROMPTRAIL_INFINITE_BASE_URL=http://127.0.0.1:8787/v1
+export PROMPTRAIL_API_KEY='your PromptRail VM beta key'
+npx @promptrail/plugins switch infinite
+```
+
+The override is only for a locally controlled VM beta. The normal default remains
+`https://api.promptrail.ai/v1`, and the installer never writes the API key to Codex configuration.
 
 ## Before installing
 
