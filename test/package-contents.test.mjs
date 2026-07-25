@@ -39,3 +39,13 @@ test("published plugin descriptions include the PromptRail plugins URL", async (
     assert.match(JSON.stringify(manifest), new RegExp(PLUGINS_URL.replaceAll(".", "\\.")), path);
   }
 });
+
+test("README avoids stale bare npx package specs", async () => {
+  const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+
+  assert.doesNotMatch(readme, /npx(?: --yes)? @promptrail\/plugins(?!@)/);
+  assert.match(
+    readme,
+    /npm exec --yes --prefer-online --package=@promptrail\/plugins@latest -- promptrail uninstall codex/,
+  );
+});

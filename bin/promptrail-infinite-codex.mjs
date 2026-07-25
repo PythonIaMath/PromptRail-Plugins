@@ -4,7 +4,9 @@ import { unlink } from "node:fs/promises";
 
 import {
   infiniteInstallStatePath,
+  infiniteCodexStatus,
   installInfiniteCodexConfig,
+  resolveInfiniteInstallStatePath,
   uninstallInfiniteCodexConfig,
 } from "../lib/codex-config.mjs";
 
@@ -28,23 +30,18 @@ async function main() {
     return;
   }
   if (command === "status") {
-    const statePath = infiniteInstallStatePath();
-    try {
-      await import("node:fs/promises").then(({ readFile }) => readFile(statePath, "utf8"));
-      process.stdout.write('{"mode":"infinite","configured":true}\n');
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      process.stdout.write('{"mode":"infinite","configured":false,"reason":"not_installed"}\n');
-    }
+    const status = await infiniteCodexStatus();
+    process.stdout.write(`${JSON.stringify({ mode: "infinite", ...status })}\n`);
     return;
   }
   if (command === "uninstall") {
+    const statePath = await resolveInfiniteInstallStatePath(infiniteInstallStatePath());
     const path = await uninstallInfiniteCodexConfig();
     if (!path) {
       process.stdout.write("PromptRail Infinite Codex configuration is not installed.\n");
       return;
     }
-    await unlinkIfExists(infiniteInstallStatePath());
+    await unlinkIfExists(statePath);
     process.stdout.write(`Restored the pre-install Codex config at ${path}.\n`);
     return;
   }

@@ -1,6 +1,6 @@
 {
   "name": "promptrail-codex-router",
-  "version": "0.1.0+codex.20260711034817",
+  "version": "0.1.1+codex.20260724235613",
   "description": "Automatically selects one of six Codex reasoning-effort levels while preserving ChatGPT subscription billing. Learn more at https://www.promptrail.ai/plugins",
   "author": {
     "name": "PromptRail",

@@ -17,9 +17,9 @@ services and production infrastructure remain separate from this repository.
 loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the default mode.
 
 `infinite` is the PromptRail provider mode. The public package provides safe configuration only;
-the current usable target is an explicitly configured portable local beta, not a public hosted production
-endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the existing
-Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
+the current usable target is an explicitly deployed private Modal-hosted beta, not a public hosted
+production endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the
+existing Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
 
 ## Plugins
 
@@ -36,26 +36,33 @@ do not silently select a default effort or switch to API billing.
 Install both integrations with one shared PromptRail token:
 
 ```bash
-npx @promptrail/plugins
+npx --yes @promptrail/plugins@latest
 ```
 
 Do not use `npm i @promptrail/plugins` as the setup command. npm runs dependency lifecycle scripts
 without a reliable interactive terminal, so it cannot safely request the access token. Use the
 `npx` command above, which opens the secure token prompt directly.
 
-This is equivalent to `npx @promptrail/plugins install plugins both`. The installer asks for your token
+This is equivalent to `npx --yes @promptrail/plugins@latest install plugins both`. The installer asks for your token
 without echoing it. For automated installs:
 
 ```bash
-PROMPTRAIL_ACCESS_TOKEN="..." npx @promptrail/plugins
+PROMPTRAIL_ACCESS_TOKEN="..." npx --yes @promptrail/plugins@latest
 ```
 Get your access token at [promptrail.ai/plugins](https://www.promptrail.ai/plugins).
 
 Check or remove an installation with `status` or `uninstall`:
 
 ```bash
-npx @promptrail/plugins status both
-npx @promptrail/plugins uninstall both
+npx --yes @promptrail/plugins@latest status both
+npx --yes @promptrail/plugins@latest uninstall both
+```
+
+If a machine previously cached an older PromptRail release, force npm to refresh registry metadata before
+uninstalling:
+
+```bash
+npm exec --yes --prefer-online --package=@promptrail/plugins@latest -- promptrail uninstall codex
 ```
 
 ## Infinite configuration preview
@@ -63,41 +70,49 @@ npx @promptrail/plugins uninstall both
 When Infinite access is available, its separate configuration can be generated explicitly:
 
 ```bash
-npx @promptrail/plugins install infinite both
+npx --yes @promptrail/plugins@latest install infinite both
 ```
 
 This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
 Code with the PromptRail base URL and model. Set `PROMPTRAIL_API_KEY` in your user environment;
-the installer does not store it. Switching modes is explicit and first restores the other mode's
-managed settings:
+the installer does not store it. Claude Code receives it through a user-only `apiKeyHelper` that
+reads the environment variable at runtime. Installation refuses unrelated Anthropic credential
+variables, key helpers, models, or gateways instead of overriding them. Switching modes is explicit
+and first restores the other mode's managed settings:
 
 ```bash
-npx @promptrail/plugins switch plugins
-npx @promptrail/plugins switch infinite
+npx --yes @promptrail/plugins@latest switch plugins
+npx --yes @promptrail/plugins@latest switch infinite
 ```
 
-### Portable local beta
+### Modal-hosted beta
 
-Start the private local-beta gateway with its protected connection catalog first. Its setup helper
-validates one exact zero-priced provider model and stores the provider key only in a mode-0600
-catalog outside the repository. The gateway key and free-provider key are different secrets: Codex
-receives only the gateway key. Then configure an isolated Codex home for evaluation:
+Deploy the private Infinite gateway to Modal first. Any supported client machine runs Codex only;
+provider execution and routing run inside the Modal service. The private hosted setup helper
+validates one exact zero-priced model, deploys the service, and configures Codex with the returned
+HTTPS endpoint. Codex receives only the gateway key; provider and subscription credentials remain
+server-side:
 
 ```bash
-export PROMPTRAIL_INFINITE_BASE_URL=http://127.0.0.1:8787/v1
-export PROMPTRAIL_API_KEY="$PROMPTRAIL_BETA_API_KEY"
+source "${XDG_CONFIG_HOME:-$HOME/.config}/promptrail/infinite/modal-environment.sh"
+export PROMPTRAIL_INFINITE_BASE_URL="https://YOUR-MODAL-SERVER.us-west.modal.direct/v1"
 export CODEX_HOME="$HOME/.codex-promptrail-infinite-beta"
-export PROMPTRAIL_INFINITE_HOME="$CODEX_HOME/promptrail-infinite"
-npx @promptrail/plugins switch infinite
+npx --yes @promptrail/plugins@latest switch infinite codex
+npx --yes @promptrail/plugins@latest switch infinite claude
 ```
 
-The override is only for a locally controlled beta gateway. The normal default remains
+The same `/v1` override works for both clients; the Claude installer safely normalizes it to the
+Anthropic service root. The override is only for your private Modal beta gateway. The normal default remains
 `https://api.promptrail.ai/v1`, and the installer never writes the API key to Codex configuration.
-Keep the provider catalog and Codex OAuth file outside repositories with mode 0600 permissions.
+Keep the Codex OAuth file outside repositories with mode 0600 permissions. Claude's key helper is
+supported by terminal CLI sessions; Claude Desktop and remote sessions use their own OAuth path.
+Treat the Codex OAuth account uploaded to the private Modal beta as dedicated to that deployment;
+another client refreshing the same rotating credential can invalidate one copy. Infinite never
+enables paid API fallback implicitly.
 Existing Plugins users are never migrated automatically; switching back remains explicit:
 
 ```bash
-npx @promptrail/plugins switch plugins
+npx --yes @promptrail/plugins@latest switch plugins codex
 ```
 
 ## Before installing
@@ -178,9 +193,12 @@ Uninstall PromptRail and restore its previous Claude values while preserving unr
 node bin/promptrail-claude-router.mjs uninstall
 ```
 
-## Privacy 
+## Privacy
 
-PromptRail does not store or sell any of your data.
+Plugins mode and hosted Infinite mode have different data paths. Infinite sends inference requests
+through the hosted gateway but does not retain raw prompts or responses by default; it records
+sanitized routing and usage receipts. See [PRIVACY.md](PRIVACY.md) for the exact fields and beta
+limitations.
 
 ## Development
 

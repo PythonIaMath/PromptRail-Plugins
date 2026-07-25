@@ -3,8 +3,10 @@
 import { unlink } from "node:fs/promises";
 
 import {
+  infiniteClaudeStatus,
   infiniteInstallStatePath,
   installInfiniteClaudeSettings,
+  resolveInfiniteInstallStatePath,
   uninstallInfiniteClaudeSettings,
 } from "../lib/claude-settings.mjs";
 
@@ -23,28 +25,23 @@ async function main() {
   if (command === "install") {
     const installed = await installInfiniteClaudeSettings();
     process.stdout.write(
-      `PromptRail Infinite Claude configuration installed: ${installed.path}\nSet PROMPTRAIL_API_KEY in your user environment before using it.\n`,
+      `PromptRail Infinite Claude configuration installed: ${installed.path}\nSet PROMPTRAIL_API_KEY in your user environment before using it; Claude reads it through the user-only key helper at ${installed.helperPath}.\n`,
     );
     return;
   }
   if (command === "status") {
-    const statePath = infiniteInstallStatePath();
-    try {
-      await import("node:fs/promises").then(({ readFile }) => readFile(statePath, "utf8"));
-      process.stdout.write('{"mode":"infinite","configured":true}\n');
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      process.stdout.write('{"mode":"infinite","configured":false,"reason":"not_installed"}\n');
-    }
+    const status = await infiniteClaudeStatus();
+    process.stdout.write(`${JSON.stringify({ mode: "infinite", ...status })}\n`);
     return;
   }
   if (command === "uninstall") {
+    const statePath = await resolveInfiniteInstallStatePath(infiniteInstallStatePath());
     const path = await uninstallInfiniteClaudeSettings();
     if (!path) {
       process.stdout.write("PromptRail Infinite Claude configuration is not installed.\n");
       return;
     }
-    await unlinkIfExists(infiniteInstallStatePath());
+    await unlinkIfExists(statePath);
     process.stdout.write(`Restored Claude settings at ${path}.\n`);
     return;
   }

@@ -10,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -32,22 +32,32 @@ async function exists(path) {
   }
 }
 
-async function fakeCodex(directory) {
-  const path = join(directory, "codex-fake.mjs");
+async function fakeCodex(directory, filename = "codex-fake.mjs") {
+  const path = join(directory, filename);
   await writeFile(path, `#!/usr/bin/env node
 import { appendFileSync, existsSync, unlinkSync } from "node:fs";
 
 const args = process.argv.slice(2);
 appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify(args) + "\\n");
-if (args.join(" ") === "plugin --help") {
-  process.stdout.write("Manage Codex plugins\\n");
+if (args.join(" ") === "plugin marketplace --help") {
+  if (process.env.FAKE_CODEX_MARKETPLACE_UNSUPPORTED === "1") {
+    process.stderr.write("unexpected argument 'marketplace'\\n");
+    process.exitCode = 2;
+  } else {
+    process.stdout.write("Manage Codex plugin marketplaces\\n");
+  }
 } else if (args.join(" ") === "plugin list --json") {
   process.stdout.write(JSON.stringify({ installed: existsSync(process.env.FAKE_CODEX_PLUGIN)
     ? [{ pluginId: "promptrail-codex-router@promptrail" }]
     : [] }));
 } else if (args[0] === "plugin" && args[1] === "remove") {
-  if (existsSync(process.env.FAKE_CODEX_PLUGIN)) unlinkSync(process.env.FAKE_CODEX_PLUGIN);
-  process.stdout.write(JSON.stringify({ removed: "promptrail-codex-router@promptrail" }));
+  if (process.env.FAKE_CODEX_REMOVE_FAIL === "1") {
+    process.stderr.write("plugin removal failed\\n");
+    process.exitCode = 2;
+  } else {
+    if (existsSync(process.env.FAKE_CODEX_PLUGIN)) unlinkSync(process.env.FAKE_CODEX_PLUGIN);
+    process.stdout.write(JSON.stringify({ removed: "promptrail-codex-router@promptrail" }));
+  }
 } else if (args.join(" ") === "plugin marketplace list --json") {
   process.stdout.write(JSON.stringify({
     marketplaces: existsSync(process.env.FAKE_CODEX_MARKETPLACE)
@@ -76,6 +86,8 @@ async function fixture() {
   const statePath = join(routerHome, "install-state.json");
   const routerConfigPath = join(routerHome, "config.json");
   const modelCatalogPath = join(routerHome, "models.json");
+  const proxyLogPath = join(routerHome, "proxy.log");
+  const proxyPidPath = join(routerHome, "proxy.pid");
   const pluginMarker = join(directory, "plugin-installed");
   const marketplaceMarker = join(directory, "marketplace-installed");
   const logPath = join(directory, "codex.log");
@@ -104,6 +116,8 @@ async function fixture() {
     statePath,
     routerConfigPath,
     modelCatalogPath,
+    proxyLogPath,
+    proxyPidPath,
     pluginMarker,
     marketplaceMarker,
     logPath,
@@ -125,6 +139,8 @@ test("Codex uninstall preserves config changes and removes all PromptRail artifa
     ));
     await writeFile(values.routerConfigPath, "{\"routerToken\":\"test-only\"}\n");
     await writeFile(values.modelCatalogPath, "{}\n");
+    await writeFile(values.proxyLogPath, "managed log\n");
+    await writeFile(values.proxyPidPath, "12345\n");
 
     const result = spawnSync(process.execPath, [routerBin, "uninstall"], {
       env: values.env,
@@ -142,6 +158,8 @@ test("Codex uninstall preserves config changes and removes all PromptRail artifa
     assert.equal(await exists(values.marketplaceMarker), false);
     assert.equal(await exists(values.routerConfigPath), false);
     assert.equal(await exists(values.modelCatalogPath), false);
+    assert.equal(await exists(values.proxyLogPath), false);
+    assert.equal(await exists(values.proxyPidPath), false);
     assert.equal(await exists(values.statePath), false);
     assert.match(await readFile(values.serviceManagerLogPath, "utf8"), /bootout|disable/);
     const calls = (await readFile(values.logPath, "utf8"))
@@ -149,10 +167,10 @@ test("Codex uninstall preserves config changes and removes all PromptRail artifa
       .split("\n")
       .map((line) => JSON.parse(line));
     assert.deepEqual(calls, [
-      ["plugin", "--help"],
+      ["plugin", "marketplace", "--help"],
       ["plugin", "list", "--json"],
-      ["plugin", "remove", "promptrail-codex-router@promptrail", "--json"],
       ["plugin", "marketplace", "list", "--json"],
+      ["plugin", "remove", "promptrail-codex-router@promptrail", "--json"],
       ["plugin", "marketplace", "remove", "promptrail", "--json"],
     ]);
 
@@ -182,6 +200,113 @@ test("Codex uninstall cleans remaining artifacts when install state is missing",
     assert.equal(await exists(values.routerConfigPath), false);
     assert.equal(await exists(values.modelCatalogPath), false);
     assert.match(result.stdout, /Removed PromptRail Codex artifacts/);
+  } finally {
+    await rm(values.directory, { recursive: true, force: true });
+  }
+});
+
+test("Codex uninstall preflights marketplace support before changing local state", async () => {
+  const values = await fixture();
+  try {
+    await writeFile(values.configPath, 'model_provider = "openai"\n');
+    await installCodexConfig(values.configPath, values.statePath, values.modelCatalogPath);
+    await writeFile(values.routerConfigPath, "{\"routerToken\":\"test-only\"}\n");
+    await writeFile(values.modelCatalogPath, "{}\n");
+    const installed = await readFile(values.configPath, "utf8");
+
+    const result = spawnSync(process.execPath, [routerBin, "uninstall"], {
+      env: { ...values.env, FAKE_CODEX_MARKETPLACE_UNSUPPORTED: "1" },
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /stopped before changing local state/);
+    assert.equal(await readFile(values.configPath, "utf8"), installed);
+    assert.equal(await exists(values.pluginMarker), true);
+    assert.equal(await exists(values.marketplaceMarker), true);
+    assert.equal(await exists(values.routerConfigPath), true);
+    assert.equal(await exists(values.modelCatalogPath), true);
+    assert.equal(await exists(values.statePath), true);
+    assert.equal(await exists(values.serviceManagerLogPath), false);
+  } finally {
+    await rm(values.directory, { recursive: true, force: true });
+  }
+});
+
+test("Codex uninstall keeps the service and credentials if plugin removal fails", async () => {
+  const values = await fixture();
+  try {
+    await writeFile(values.configPath, 'model_provider = "openai"\n');
+    await installCodexConfig(values.configPath, values.statePath, values.modelCatalogPath);
+    await writeFile(values.routerConfigPath, "{\"routerToken\":\"test-only\"}\n");
+    await writeFile(values.modelCatalogPath, "{}\n");
+
+    const result = spawnSync(process.execPath, [routerBin, "uninstall"], {
+      env: { ...values.env, FAKE_CODEX_REMOVE_FAIL: "1" },
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /remove the Codex plugin/);
+    assert.equal(await readFile(values.configPath, "utf8"), 'model_provider = "openai"\n');
+    assert.equal(await exists(values.pluginMarker), true);
+    assert.equal(await exists(values.marketplaceMarker), true);
+    assert.equal(await exists(values.routerConfigPath), true);
+    assert.equal(await exists(values.modelCatalogPath), true);
+    assert.equal(await exists(values.statePath), true);
+    assert.equal(await exists(values.serviceManagerLogPath), false);
+  } finally {
+    await rm(values.directory, { recursive: true, force: true });
+  }
+});
+
+test("fresh custom CODEX_HOME uninstall does not touch the user service", async () => {
+  const values = await fixture();
+  try {
+    await rm(values.pluginMarker);
+    await rm(values.marketplaceMarker);
+    await rm(dirname(values.configPath), { recursive: true, force: true });
+
+    const result = spawnSync(process.execPath, [routerBin, "uninstall"], {
+      env: values.env,
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /is not installed/);
+    assert.equal(await exists(dirname(values.configPath)), true);
+    assert.equal(await exists(values.serviceManagerLogPath), false);
+  } finally {
+    await rm(values.directory, { recursive: true, force: true });
+  }
+});
+
+test("Codex uninstall skips an obsolete PATH binary and finds a compatible one", async () => {
+  const values = await fixture();
+  try {
+    const obsoleteDirectory = join(values.directory, "obsolete-bin");
+    const compatibleDirectory = join(values.directory, "compatible-bin");
+    await mkdir(obsoleteDirectory);
+    await mkdir(compatibleDirectory);
+    const obsoleteCodex = join(obsoleteDirectory, "codex");
+    await writeFile(obsoleteCodex, "#!/bin/sh\nexit 2\n");
+    await chmod(obsoleteCodex, 0o755);
+    const compatibleCodex = await fakeCodex(compatibleDirectory, "codex");
+    const env = {
+      ...values.env,
+      PATH: [obsoleteDirectory, compatibleDirectory, values.env.PATH].join(delimiter),
+    };
+    delete env.CODEX_BIN;
+
+    const result = spawnSync(process.execPath, [routerBin, "uninstall"], {
+      env,
+      encoding: "utf8",
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, new RegExp(`Using Codex CLI: ${compatibleCodex}`));
+    assert.equal(await exists(values.pluginMarker), false);
+    assert.equal(await exists(values.marketplaceMarker), false);
   } finally {
     await rm(values.directory, { recursive: true, force: true });
   }

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
   installClaudeSettings,
   installInfiniteClaudeSettings,
+  infiniteClaudeStatus,
+  infiniteClaudeBaseUrl,
   patchClaudeSettings,
   patchInfiniteClaudeSettings,
   uninstallClaudeSettings,
@@ -17,6 +21,9 @@ const CLEAN_ENVIRONMENT = {
   ANTHROPIC_API_KEY: "",
   ANTHROPIC_AUTH_TOKEN: "",
 };
+const INFINITE_CLAUDE_BIN = fileURLToPath(
+  new URL("../../bin/promptrail-infinite-claude.mjs", import.meta.url),
+);
 
 test("adds only the local gateway URL to Claude settings", () => {
   const patched = JSON.parse(patchClaudeSettings(
@@ -61,22 +68,69 @@ test("refuses API credentials and existing gateways", () => {
 test("generates an Infinite Claude configuration without storing a PromptRail key", () => {
   const patched = JSON.parse(patchInfiniteClaudeSettings(
     JSON.stringify({ theme: "dark", env: { KEEP_ME: "yes" } }),
+    undefined,
+    undefined,
+    CLEAN_ENVIRONMENT,
   ));
   assert.equal(patched.theme, "dark");
   assert.equal(patched.env.KEEP_ME, "yes");
   assert.equal(patched.env.ANTHROPIC_BASE_URL, "https://api.promptrail.ai");
   assert.equal(patched.env.ANTHROPIC_MODEL, "promptrail/infinite");
+  assert.match(patched.apiKeyHelper, /api-key-helper\.sh/);
   assert.doesNotMatch(JSON.stringify(patched), /PROMPTRAIL_API_KEY|infinite-secret/);
+});
+
+test("normalizes the shared Modal endpoint for Claude's Anthropic paths", () => {
+  assert.equal(
+    infiniteClaudeBaseUrl("https://gateway.example/v1/"),
+    "https://gateway.example",
+  );
+  assert.throws(
+    () => infiniteClaudeBaseUrl("https://user:secret@gateway.example/v1"),
+    /without credentials/,
+  );
+  assert.throws(
+    () => infiniteClaudeBaseUrl("http://127.0.0.1:8787/v1"),
+    /HTTPS/,
+  );
 });
 
 test("refuses to replace an unrelated Claude model or gateway for Infinite", () => {
   assert.throws(
-    () => patchInfiniteClaudeSettings(JSON.stringify({ env: { ANTHROPIC_MODEL: "other" } })),
+    () => patchInfiniteClaudeSettings(
+      JSON.stringify({ env: { ANTHROPIC_MODEL: "other" } }),
+      undefined,
+      undefined,
+      CLEAN_ENVIRONMENT,
+    ),
     /ANTHROPIC_MODEL is already configured/,
   );
   assert.throws(
-    () => patchInfiniteClaudeSettings(JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://other" } })),
+    () => patchInfiniteClaudeSettings(
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://other" } }),
+      undefined,
+      undefined,
+      CLEAN_ENVIRONMENT,
+    ),
     /ANTHROPIC_BASE_URL is already configured/,
+  );
+  assert.throws(
+    () => patchInfiniteClaudeSettings(
+      JSON.stringify({ apiKeyHelper: "/unrelated/key-helper" }),
+      undefined,
+      undefined,
+      CLEAN_ENVIRONMENT,
+    ),
+    /apiKeyHelper is already configured/,
+  );
+  assert.throws(
+    () => patchInfiniteClaudeSettings(
+      "{}",
+      undefined,
+      undefined,
+      { ...CLEAN_ENVIRONMENT, ANTHROPIC_AUTH_TOKEN: "unrelated" },
+    ),
+    /would override PromptRail/,
   );
 });
 
@@ -84,12 +138,141 @@ test("restores the original Claude settings when Infinite is uninstalled", async
   const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-"));
   const settingsPath = join(directory, "settings.json");
   const statePath = join(directory, "install-state.json");
+  const helperPath = join(directory, "api-key-helper.sh");
   const original = '{\n  "theme": "dark"\n}\n';
   await writeFile(settingsPath, original);
   try {
-    await installInfiniteClaudeSettings({ path: settingsPath, statePath });
+    await installInfiniteClaudeSettings({
+      path: settingsPath,
+      statePath,
+      helperPath,
+      environment: CLEAN_ENVIRONMENT,
+    });
+    const helperStat = await stat(helperPath);
+    assert.equal(helperStat.mode & 0o777, 0o700);
+    const helperResult = spawnSync(helperPath, [], {
+      encoding: "utf8",
+      env: { ...process.env, PROMPTRAIL_API_KEY: "test-only-key" },
+    });
+    assert.equal(helperResult.status, 0, helperResult.stderr);
+    assert.equal(helperResult.stdout, "test-only-key\n");
+    assert.doesNotMatch(await readFile(settingsPath, "utf8"), /test-only-key|PROMPTRAIL_API_KEY/);
     await uninstallInfiniteClaudeSettings(statePath);
     assert.equal(await readFile(settingsPath, "utf8"), original);
+    await assert.rejects(readFile(helperPath, "utf8"), { code: "ENOENT" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("preserves a user-modified Infinite key helper during uninstall", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-helper-"));
+  const settingsPath = join(directory, "settings.json");
+  const statePath = join(directory, "install-state.json");
+  const helperPath = join(directory, "api-key-helper.sh");
+  await writeFile(settingsPath, "{}\n");
+  try {
+    await installInfiniteClaudeSettings({
+      path: settingsPath,
+      statePath,
+      helperPath,
+      environment: CLEAN_ENVIRONMENT,
+    });
+    await writeFile(helperPath, "#!/bin/sh\nprintf custom\\n");
+    await uninstallInfiniteClaudeSettings(statePath);
+    assert.equal(await readFile(helperPath, "utf8"), "#!/bin/sh\nprintf custom\\n");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Infinite Claude status verifies settings and the key helper", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-status-"));
+  const settingsPath = join(directory, "settings.json");
+  const statePath = join(directory, "install-state.json");
+  const helperPath = join(directory, "api-key-helper.sh");
+  await writeFile(settingsPath, "{}\n");
+  try {
+    await installInfiniteClaudeSettings({
+      path: settingsPath,
+      statePath,
+      helperPath,
+      environment: CLEAN_ENVIRONMENT,
+    });
+    assert.equal((await infiniteClaudeStatus(statePath)).configured, true);
+    await writeFile(helperPath, "#!/bin/sh\nexit 1\n");
+    assert.deepEqual(
+      await infiniteClaudeStatus(statePath),
+      { configured: false, reason: "helper_modified", statePath },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("upgrades an unchanged Infinite endpoint without losing original Claude settings", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-upgrade-"));
+  const settingsPath = join(directory, "settings.json");
+  const statePath = join(directory, "install-state.json");
+  const helperPath = join(directory, "api-key-helper.sh");
+  const original = '{"theme":"dark"}\n';
+  await writeFile(settingsPath, original);
+  try {
+    await installInfiniteClaudeSettings({
+      baseUrl: "https://old.example/v1",
+      path: settingsPath,
+      statePath,
+      helperPath,
+      environment: CLEAN_ENVIRONMENT,
+    });
+    await installInfiniteClaudeSettings({
+      baseUrl: "https://new.example/v1",
+      path: settingsPath,
+      statePath,
+      helperPath,
+      environment: CLEAN_ENVIRONMENT,
+    });
+    assert.equal(
+      JSON.parse(await readFile(settingsPath, "utf8")).env.ANTHROPIC_BASE_URL,
+      "https://new.example",
+    );
+    await uninstallInfiniteClaudeSettings(statePath);
+    assert.equal(await readFile(settingsPath, "utf8"), original);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Infinite Claude CLI installs from environment defaults without storing the key", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-cli-"));
+  const infiniteHome = join(directory, "promptrail-infinite");
+  const environment = {
+    ...process.env,
+    CLAUDE_CONFIG_DIR: directory,
+    PROMPTRAIL_INFINITE_CLAUDE_HOME: infiniteHome,
+    PROMPTRAIL_INFINITE_BASE_URL: "https://gateway.example/v1",
+    PROMPTRAIL_API_KEY: "must-not-be-persisted",
+    ANTHROPIC_API_KEY: "",
+    ANTHROPIC_AUTH_TOKEN: "",
+  };
+  try {
+    const installed = spawnSync(process.execPath, [INFINITE_CLAUDE_BIN, "install"], {
+      encoding: "utf8",
+      env: environment,
+    });
+    assert.equal(installed.status, 0, installed.stderr);
+    const settings = await readFile(join(directory, "settings.json"), "utf8");
+    assert.doesNotMatch(settings, /must-not-be-persisted|PROMPTRAIL_API_KEY/);
+    assert.equal(JSON.parse(settings).env.ANTHROPIC_BASE_URL, "https://gateway.example");
+
+    const uninstalled = spawnSync(process.execPath, [INFINITE_CLAUDE_BIN, "uninstall"], {
+      encoding: "utf8",
+      env: environment,
+    });
+    assert.equal(uninstalled.status, 0, uninstalled.stderr);
+    await assert.rejects(readFile(join(infiniteHome, "api-key-helper.sh"), "utf8"), {
+      code: "ENOENT",
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
