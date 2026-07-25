@@ -20,6 +20,8 @@ loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the 
 the current usable target is an explicitly deployed private Modal-hosted beta, not a public hosted
 production endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the
 existing Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
+It is never activated by the default installer, by the presence of an Infinite API key, or by an
+upgrade. The user must explicitly run the Infinite install or switch command.
 
 ## Plugins
 
@@ -108,7 +110,9 @@ Keep the Codex OAuth file outside repositories with mode 0600 permissions. Claud
 supported by terminal CLI sessions; Claude Desktop and remote sessions use their own OAuth path.
 Treat the Codex OAuth account uploaded to the private Modal beta as dedicated to that deployment;
 another client refreshing the same rotating credential can invalidate one copy. Infinite never
-enables paid API fallback implicitly.
+dispatches paid API capacity: it uses explicitly admitted zero-cost API models first and the user's
+supported subscription capacity for quality-preserving escalation. If protected subscription
+reserve is unavailable, it continues with free capacity or returns a clear no-capacity error.
 Existing Plugins users are never migrated automatically; switching back remains explicit:
 
 ```bash

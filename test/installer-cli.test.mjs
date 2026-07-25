@@ -64,6 +64,7 @@ test("prefers the dedicated access-token environment variable", () => {
     }),
     "access-token",
   );
+  assert.equal(configuredToken({}, { PROMPTRAIL_API_KEY: "infinite-only" }), "");
 });
 
 test("passes secrets through child environment, never command arguments", async () => {
@@ -71,7 +72,11 @@ test("passes secrets through child environment, never command arguments", async 
   const output = outputBuffer();
   const status = await runCli({
     argv: ["install", "both"],
-    env: { PROMPTRAIL_ACCESS_TOKEN: "router-secret" },
+    env: {
+      PROMPTRAIL_ACCESS_TOKEN: "router-secret",
+      PROMPTRAIL_API_KEY: "infinite-secret-that-must-stay-isolated",
+      PROMPTRAIL_INFINITE_BASE_URL: "https://infinite.example/v1",
+    },
     input: {},
     output: output.stream,
     errorOutput: output.stream,
@@ -90,6 +95,8 @@ test("passes secrets through child environment, never command arguments", async 
     assert.deepEqual(call.args.slice(1), ["install"]);
     assert.doesNotMatch(call.args.join(" "), /router-secret/);
     assert.equal(call.options.env.PROMPTRAIL_ROUTER_TOKEN, "router-secret");
+    assert.equal(call.options.env.PROMPTRAIL_API_KEY, undefined);
+    assert.equal(call.options.env.PROMPTRAIL_INFINITE_BASE_URL, undefined);
   }
   assert.equal(calls[0].options.env.PROMPTRAIL_GRADER_URL, DEFAULT_GRADER_URLS.codex);
   assert.equal(calls[0].options.env.PROMPTRAIL_OPTIONAL_CLIENT, "1");
@@ -152,7 +159,12 @@ test("installs Infinite without passing its API key to child commands or local p
   const output = outputBuffer();
   const status = await runCli({
     argv: ["install", "infinite", "both"],
-    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
+    env: {
+      PROMPTRAIL_API_KEY: "infinite-secret",
+      PROMPTRAIL_ACCESS_TOKEN: "plugins-secret-that-must-stay-isolated",
+      PROMPTRAIL_ROUTER_TOKEN: "legacy-plugins-secret",
+      PROMPTRAIL_GRADER_URL: "https://plugins-router.example",
+    },
     input: {},
     output: output.stream,
     errorOutput: output.stream,
@@ -169,6 +181,7 @@ test("installs Infinite without passing its API key to child commands or local p
   for (const call of calls) {
     assert.deepEqual(call.args.slice(1), ["install"]);
     assert.equal(call.options.env.PROMPTRAIL_ROUTER_TOKEN, undefined);
+    assert.equal(call.options.env.PROMPTRAIL_ACCESS_TOKEN, undefined);
     assert.equal(call.options.env.PROMPTRAIL_GRADER_URL, undefined);
     assert.doesNotMatch(call.args.join(" "), /infinite-secret/);
   }
