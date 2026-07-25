@@ -32,10 +32,10 @@ async function exists(path) {
   }
 }
 
-async function fakeCodex(directory, filename = "codex-fake.mjs") {
+async function fakeCodex(directory, filename = "codex-fake.cjs") {
   const path = join(directory, filename);
   await writeFile(path, `#!/usr/bin/env node
-import { appendFileSync, existsSync, unlinkSync } from "node:fs";
+const { appendFileSync, existsSync, unlinkSync } = require("node:fs");
 
 const args = process.argv.slice(2);
 appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify(args) + "\\n");
