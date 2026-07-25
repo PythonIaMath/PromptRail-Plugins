@@ -311,3 +311,68 @@ test("Codex uninstall skips an obsolete PATH binary and finds a compatible one",
     await rm(values.directory, { recursive: true, force: true });
   }
 });
+
+test("mode switch treats a clean machine with no plugin-capable Codex as already uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-codex-clean-switch-"));
+  try {
+    const codexHome = join(directory, "codex");
+    const routerHome = join(directory, "router");
+    const result = spawnSync(
+      process.execPath,
+      [routerBin, "uninstall", "--switch-if-installed"],
+      {
+        env: {
+          ...process.env,
+          HOME: directory,
+          CODEX_HOME: codexHome,
+          CODEX_BIN: join(directory, "missing-codex"),
+          PROMPTRAIL_ROUTER_HOME: routerHome,
+          PROMPTRAIL_ROUTER_CONFIG: join(routerHome, "config.json"),
+        },
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /is not installed/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("mode switch fails closed when Codex registry state cannot be removed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-codex-registry-switch-"));
+  try {
+    const codexHome = join(directory, "codex");
+    const pluginDir = join(codexHome, "plugins");
+    const routerHome = join(directory, "router");
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, "installed_plugins.json"),
+      JSON.stringify({
+        version: 1,
+        plugins: { "promptrail-codex-router@promptrail": [{ scope: "user" }] },
+      }),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [routerBin, "uninstall", "--switch-if-installed"],
+      {
+        env: {
+          ...process.env,
+          HOME: directory,
+          CODEX_HOME: codexHome,
+          CODEX_BIN: join(directory, "missing-codex"),
+          PROMPTRAIL_ROUTER_HOME: routerHome,
+          PROMPTRAIL_ROUTER_CONFIG: join(routerHome, "config.json"),
+        },
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /registry still contains PromptRail/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

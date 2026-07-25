@@ -190,7 +190,10 @@ test("switches by uninstalling the previous mode before installing the selected 
   });
   assert.equal(status, 0);
   assert.deepEqual(calls.map((call) => call.args.slice(1)), [
-    ["uninstall"], ["uninstall"], ["install"], ["install"],
+    ["uninstall", "--switch-if-installed"],
+    ["uninstall", "--switch-if-installed"],
+    ["install"],
+    ["install"],
   ]);
   assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
   assert.match(calls[2].args[0], /promptrail-infinite-codex\.mjs$/);
@@ -211,7 +214,10 @@ test("switches only the explicitly requested client", async () => {
     },
   });
   assert.equal(status, 0);
-  assert.deepEqual(calls.map((call) => call.args.slice(1)), [["uninstall"], ["install"]]);
+  assert.deepEqual(calls.map((call) => call.args.slice(1)), [
+    ["uninstall", "--switch-if-installed"],
+    ["install"],
+  ]);
   assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
   assert.match(calls[1].args[0], /promptrail-infinite-codex\.mjs$/);
 });

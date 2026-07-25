@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rmdir, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
@@ -119,6 +119,28 @@ function hasPromptRailMarketplace() {
   return marketplaces.marketplaces?.some((entry) => entry.name === "promptrail") || false;
 }
 
+function pluginRegistryHasPromptRail() {
+  const pluginRoot = join(
+    process.env.CODEX_HOME || join(homedir(), ".codex"),
+    "plugins",
+  );
+  for (const filename of ["installed_plugins.json", "known_marketplaces.json"]) {
+    const path = join(pluginRoot, filename);
+    if (!existsSync(path)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+      throw new Error(`Cannot safely inspect Codex plugin state at ${path}.`, { cause: error });
+    }
+    if (JSON.stringify(parsed).toLowerCase().includes("promptrail")) return true;
+  }
+  return [
+    join(pluginRoot, "cache", "promptrail"),
+    join(pluginRoot, "marketplaces", "promptrail"),
+  ].some((path) => existsSync(path));
+}
+
 async function unlinkIfExists(path) {
   try {
     await unlink(path);
@@ -232,9 +254,17 @@ async function uninstall() {
       pluginInstalled = hasInstalledPlugin();
       marketplaceInstalled = hasPromptRailMarketplace();
     } catch (error) {
-      throw new Error(
-        `PromptRail Codex uninstall stopped before changing local state: ${error.message}`,
-      );
+      if (process.argv.includes("--switch-if-installed") && !hadRouterArtifacts) {
+        if (pluginRegistryHasPromptRail()) {
+          throw new Error(
+            "Codex is unavailable and its plugin registry still contains PromptRail; refusing an incomplete mode switch.",
+          );
+        }
+      } else {
+        throw new Error(
+          `PromptRail Codex uninstall stopped before changing local state: ${error.message}`,
+        );
+      }
     }
   }
 
@@ -267,7 +297,9 @@ async function uninstall() {
       });
     }
   }
-  const serviceRemoved = hadRouterArtifacts || !hasCustomRouterScope
+  const serviceRemoved = hadRouterArtifacts || (
+    !process.argv.includes("--switch-if-installed") && !hasCustomRouterScope
+  )
     ? await attempt("remove the Codex router service", uninstallUserService)
     : false;
   const configRemoved = await attempt("remove the Codex router credential", () => (

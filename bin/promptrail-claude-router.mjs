@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { homedir, platform } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
 import {
   installClaudeSettings,
@@ -14,6 +16,7 @@ import {
   DEFAULT_HOST,
   DEFAULT_PORT,
   routerConfigPath,
+  routerHome,
   saveRouterConfig,
 } from "../plugins/promptrail-claude-router/src/config.mjs";
 import { startProxy } from "../plugins/promptrail-claude-router/src/proxy.mjs";
@@ -86,6 +89,38 @@ function hasInstalledPlugin() {
 function hasPromptRailMarketplace() {
   const marketplaces = runJson(claudeBinary(), ["plugin", "marketplace", "list", "--json"]);
   return marketplaces.some((entry) => entry.name === "promptrail");
+}
+
+function pluginRegistryHasPromptRail() {
+  const pluginRoot = join(
+    process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
+    "plugins",
+  );
+  for (const filename of ["installed_plugins.json", "known_marketplaces.json"]) {
+    const path = join(pluginRoot, filename);
+    if (!existsSync(path)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+      throw new Error(`Cannot safely inspect Claude plugin state at ${path}.`, { cause: error });
+    }
+    if (JSON.stringify(parsed).toLowerCase().includes("promptrail")) return true;
+  }
+  return [
+    join(pluginRoot, "cache", "promptrail"),
+    join(pluginRoot, "marketplaces", "promptrail"),
+  ].some((path) => existsSync(path));
+}
+
+function serviceArtifactPath() {
+  if (platform() === "darwin") {
+    return join(homedir(), "Library", "LaunchAgents", "ai.promptrail.claude-router.plist");
+  }
+  if (platform() === "linux") {
+    return join(homedir(), ".config", "systemd", "user", "promptrail-claude-router.service");
+  }
+  return null;
 }
 
 async function unlinkIfExists(path) {
@@ -175,11 +210,32 @@ async function uninstall() {
     }
   };
 
+  const hadRouterArtifacts = [
+    installStatePath(),
+    routerConfigPath(),
+    join(routerHome(), "proxy.log"),
+    join(routerHome(), "proxy.pid"),
+    serviceArtifactPath(),
+  ].filter(Boolean).some((path) => existsSync(path));
+  const skipPluginRemove = process.argv.includes("--skip-plugin-remove");
+  const switchIfInstalled = process.argv.includes("--switch-if-installed");
+  let pluginStateKnownClean = false;
+  if (!skipPluginRemove && switchIfInstalled && !hadRouterArtifacts && !hasClaudeBinary()) {
+    if (pluginRegistryHasPromptRail()) {
+      throw new Error(
+        "Claude Code is unavailable and its plugin registry still contains PromptRail; refusing an incomplete mode switch.",
+      );
+    }
+    pluginStateKnownClean = true;
+  }
+
   const settingsPath = await attempt("restore Claude settings", () => uninstallClaudeSettings());
-  const serviceRemoved = await attempt("remove the Claude router service", uninstallUserService);
+  const serviceRemoved = hadRouterArtifacts || !switchIfInstalled
+    ? await attempt("remove the Claude router service", uninstallUserService)
+    : false;
   let pluginRemoved = false;
   let marketplaceRemoved = false;
-  if (!process.argv.includes("--skip-plugin-remove")) {
+  if (!skipPluginRemove && !pluginStateKnownClean) {
     pluginRemoved = await attempt("remove the Claude plugin", () => {
       if (!hasInstalledPlugin()) {
         return false;
