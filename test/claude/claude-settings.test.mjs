@@ -76,8 +76,37 @@ test("generates an Infinite Claude configuration without storing a PromptRail ke
   assert.equal(patched.env.KEEP_ME, "yes");
   assert.equal(patched.env.ANTHROPIC_BASE_URL, "https://api.promptrail.ai");
   assert.equal(patched.env.ANTHROPIC_MODEL, "promptrail/infinite");
+  assert.equal(
+    patched.env.ANTHROPIC_CUSTOM_HEADERS,
+    "X-PromptRail-Diagnostics: executed-model",
+  );
   assert.match(patched.apiKeyHelper, /api-key-helper\.sh/);
   assert.doesNotMatch(JSON.stringify(patched), /PROMPTRAIL_API_KEY|infinite-secret/);
+});
+
+test("preserves unrelated Claude custom headers while enabling actor diagnostics", () => {
+  const patched = JSON.parse(patchInfiniteClaudeSettings(
+    JSON.stringify({ env: { ANTHROPIC_CUSTOM_HEADERS: "X-Trace: enabled" } }),
+    undefined,
+    undefined,
+    CLEAN_ENVIRONMENT,
+  ));
+
+  assert.equal(
+    patched.env.ANTHROPIC_CUSTOM_HEADERS,
+    "X-Trace: enabled\nX-PromptRail-Diagnostics: executed-model",
+  );
+  assert.throws(
+    () => patchInfiniteClaudeSettings(
+      JSON.stringify({
+        env: { ANTHROPIC_CUSTOM_HEADERS: "X-PromptRail-Diagnostics: another-mode" },
+      }),
+      undefined,
+      undefined,
+      CLEAN_ENVIRONMENT,
+    ),
+    /refusing to replace/,
+  );
 });
 
 test("normalizes the shared Modal endpoint for Claude's Anthropic paths", () => {

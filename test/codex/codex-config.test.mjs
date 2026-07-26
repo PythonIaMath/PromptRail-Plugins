@@ -123,6 +123,10 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
   assert.match(patched, /requires_openai_auth = false/);
   assert.match(patched, /wire_api = "responses"/);
+  assert.match(
+    patched,
+    /http_headers = \{ "X-PromptRail-Diagnostics" = "executed-model" \}/,
+  );
   assert.match(patched, /model_catalog_json = "\/home\/user\/\.codex\/promptrail-infinite\/models\.json"/);
   assert.doesNotMatch(patched, /127\.0\.0\.1/);
 });

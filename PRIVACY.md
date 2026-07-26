@@ -63,9 +63,12 @@ that key into a project, Codex configuration, or Claude settings. Codex reads
 environment variable and prints it only to Claude Code's credential subprocess. Modified helpers
 are preserved during uninstall.
 
-The client-facing response exposes `promptrail/infinite`, route ID, policy/catalog versions,
-premium-use status, degraded-mode status, and pre-dispatch timing. Underlying route details are not
-returned to the coding harness unless a future diagnostic mode is explicitly documented and
-enabled.
+By default, the client-facing response exposes `promptrail/infinite`, route ID, policy/catalog
+versions, premium-use status, degraded-mode status, and pre-dispatch timing. The separately
+activated Infinite client configuration enables the documented `executed-model` diagnostic. In
+that mode, the response model, response metadata, and completed stream identify only the provider
+and model that actually generated usable output plus its capacity class and whether a fallback was
+used. Candidate lists, connection IDs, reserve values, credentials, and the internal execution plan
+are not returned to the coding harness.
 
 For privacy questions, contact [support@promptrail.ai](mailto:support@promptrail.ai).

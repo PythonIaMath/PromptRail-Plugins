@@ -87,13 +87,19 @@ npx --yes @promptrail/plugins@latest switch plugins
 npx --yes @promptrail/plugins@latest switch infinite
 ```
 
+The explicit Infinite configuration also sends
+`X-PromptRail-Diagnostics: executed-model`. The requested model remains
+`promptrail/infinite`, while each successful API response or completed stream identifies the free
+or subscription actor that actually generated it. This exposes no candidate list, credential ID,
+reserve level, or internal fallback plan. Plugins mode does not send this header.
+
 ### Modal-hosted beta
 
 Deploy the private Infinite gateway to Modal first. Any supported client machine runs Codex only;
 provider execution and routing run inside the Modal service. The private hosted setup helper
-validates one exact zero-priced model, deploys the service, and configures Codex with the returned
-HTTPS endpoint. Codex receives only the gateway key; provider and subscription credentials remain
-server-side:
+validates a bounded cohort of exact zero-priced models, deploys the service, and configures Codex
+with the returned HTTPS endpoint. One actor executes at a time. Codex receives only the gateway
+key; provider and subscription credentials remain server-side:
 
 ```bash
 source "${XDG_CONFIG_HOME:-$HOME/.config}/promptrail/infinite/modal-environment.sh"
@@ -111,8 +117,11 @@ supported by terminal CLI sessions; Claude Desktop and remote sessions use their
 Treat the Codex OAuth account uploaded to the private Modal beta as dedicated to that deployment;
 another client refreshing the same rotating credential can invalidate one copy. Infinite never
 dispatches paid API capacity: it uses explicitly admitted zero-cost API models first and the user's
-supported subscription capacity for quality-preserving escalation. If protected subscription
-reserve is unavailable, it continues with free capacity or returns a clear no-capacity error.
+supported subscription capacity for quality-preserving escalation. If every capable free actor is
+down, or the request-specific predicted success of the best free actor is below the tenant quality
+floor, the gateway selects the subscription directly without first spending a free-provider call.
+If protected subscription reserve is unavailable, it continues with free capacity or returns a
+clear no-capacity error.
 Existing Plugins users are never migrated automatically; switching back remains explicit:
 
 ```bash
