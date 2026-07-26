@@ -206,6 +206,49 @@ test("updates an unchanged managed Infinite endpoint without losing uninstall st
   }
 });
 
+test("upgrades Infinite while preserving Codex additions outside managed settings", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-upgrade-user-config-"));
+  const configPath = join(directory, "config.toml");
+  const statePath = join(directory, "install-state.json");
+  const catalogPath = join(directory, "models.json");
+  await writeFile(configPath, "");
+  try {
+    await installInfiniteCodexConfig(
+      configPath,
+      statePath,
+      "https://old.example/v1",
+      catalogPath,
+    );
+    const installed = await readFile(configPath, "utf8");
+    await writeFile(configPath, installed.replace(
+      "# <<< promptrail-infinite provider <<<",
+      `[projects."${directory}"]\ntrust_level = "trusted"\n# <<< promptrail-infinite provider <<<`,
+    ));
+
+    await upgradeInstalledInfiniteCodexConfig({
+      path: configPath,
+      statePath,
+      baseUrl: "https://new.example/v1",
+      modelCatalogPath: catalogPath,
+    });
+
+    const upgraded = await readFile(configPath, "utf8");
+    assert.match(upgraded, /base_url = "https:\/\/new\.example\/v1"/);
+    assert.match(
+      upgraded,
+      /http_headers = \{ "X-PromptRail-Diagnostics" = "executed-model" \}/,
+    );
+    assert.match(upgraded, new RegExp(`\\[projects\\."${directory.replaceAll("/", "\\/")}"\\]`));
+    await uninstallInfiniteCodexConfig(statePath);
+    const restored = await readFile(configPath, "utf8");
+    assert.match(restored, new RegExp(`\\[projects\\."${directory.replaceAll("/", "\\/")}"\\]`));
+    assert.match(restored, /trust_level = "trusted"/);
+    assert.doesNotMatch(restored, /model_providers\.promptrail-infinite|managed by promptrail-infinite/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("rolls back the Codex config when an Infinite upgrade cannot commit state", {
   skip: process.platform === "win32",
 }, async () => {
@@ -256,7 +299,13 @@ test("refuses to update Infinite after the managed Codex config changed", async 
       "https://old.example/v1",
       catalogPath,
     );
-    await writeFile(configPath, `${await readFile(configPath, "utf8")}\n# user change\n`);
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        'base_url = "https://old.example/v1"',
+        'base_url = "https://user-changed.example/v1"',
+      ),
+    );
     await assert.rejects(
       () => upgradeInstalledInfiniteCodexConfig({
         path: configPath,
@@ -264,7 +313,35 @@ test("refuses to update Infinite after the managed Codex config changed", async 
         baseUrl: "https://new.example/v1",
         modelCatalogPath: catalogPath,
       }),
-      /changed after PromptRail Infinite installation/,
+      /PromptRail-managed Infinite settings changed/,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("refuses to restore a diagnostics header removed from a current Infinite install", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-diagnostics-conflict-"));
+  const configPath = join(directory, "config.toml");
+  const statePath = join(directory, "install-state.json");
+  const catalogPath = join(directory, "models.json");
+  await writeFile(configPath, "");
+  try {
+    await installInfiniteCodexConfig(configPath, statePath, undefined, catalogPath);
+    await writeFile(
+      configPath,
+      (await readFile(configPath, "utf8")).replace(
+        'http_headers = { "X-PromptRail-Diagnostics" = "executed-model" }\n',
+        "",
+      ),
+    );
+    await assert.rejects(
+      () => upgradeInstalledInfiniteCodexConfig({
+        path: configPath,
+        statePath,
+        modelCatalogPath: catalogPath,
+      }),
+      /PromptRail-managed Infinite settings changed/,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

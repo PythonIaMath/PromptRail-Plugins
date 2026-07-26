@@ -89,9 +89,13 @@ npx --yes @promptrail/plugins@latest switch infinite
 
 The explicit Infinite configuration also sends
 `X-PromptRail-Diagnostics: executed-model`. The requested model remains
-`promptrail/infinite`, while each successful API response or completed stream identifies the free
-or subscription actor that actually generated it. This exposes no candidate list, credential ID,
-reserve level, or internal fallback plan. Plugins mode does not send this header.
+`promptrail/infinite`, so Codex's model selector and footer keep showing that stable virtual model.
+For every completed Codex LLM call, the transcript adds a dim line such as
+`Executed by openrouter/cohere/north-mini-code:free · free` or `... · subscription reserve` before
+the actor's output. Tool-result continuations get their own line because they are separate model
+calls. These display-only protocol items are removed before the next provider request. This exposes
+no candidate list, credential ID, reserve level, or internal fallback plan. Plugins mode does not
+send this header.
 
 ### Modal-hosted beta
 
