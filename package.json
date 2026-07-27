@@ -1,6 +1,6 @@
 {
   "name": "@promptrail/plugins",
-  "version": "1.5.0-infinite-beta.0",
+  "version": "1.5.0-infinite-beta.1",
   "description": "PromptRail integrations for Codex and Claude Code, with subscription-based Plugins mode and an explicitly activated hosted Infinite beta.",
   "type": "module",
   "bin": {

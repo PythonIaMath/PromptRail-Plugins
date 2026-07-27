@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0-infinite-beta.1
+
+### Patch Changes
+
+- Keep custom Claude profiles isolated by reusing legacy Infinite state only when it belongs to the active `settings.json` file.
+
 ## 1.5.0-infinite-beta.0
 
 ### Minor Changes
