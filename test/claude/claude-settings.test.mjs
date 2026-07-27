@@ -13,6 +13,7 @@ import {
   infiniteClaudeBaseUrl,
   patchClaudeSettings,
   patchInfiniteClaudeSettings,
+  resolveInfiniteInstallStatePath,
   uninstallClaudeSettings,
   uninstallInfiniteClaudeSettings,
 } from "../../lib/claude-settings.mjs";
@@ -312,6 +313,68 @@ test("Infinite Claude CLI installs from environment defaults without storing the
     await assert.rejects(readFile(join(infiniteHome, "api-key-helper.sh"), "utf8"), {
       code: "ENOENT",
     });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("custom Claude profiles ignore legacy Infinite state owned by another settings file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-profile-"));
+  const preferredStatePath = join(directory, "custom-install-state.json");
+  const legacyStatePath = join(directory, "legacy-install-state.json");
+  const customSettingsPath = join(directory, "custom-settings.json");
+  try {
+    await writeFile(legacyStatePath, `${JSON.stringify({
+      settingsPath: join(directory, "unrelated-settings.json"),
+    })}\n`);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedSettingsPath: customSettingsPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+    await writeFile(legacyStatePath, "{malformed");
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedSettingsPath: customSettingsPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+    await unlink(legacyStatePath);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedSettingsPath: customSettingsPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("custom Claude profiles reuse legacy Infinite state only when ownership matches", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-claude-legacy-"));
+  const preferredStatePath = join(directory, "custom-install-state.json");
+  const legacyStatePath = join(directory, "legacy-install-state.json");
+  const customSettingsPath = join(directory, "custom-settings.json");
+  try {
+    await writeFile(legacyStatePath, `${JSON.stringify({
+      settingsPath: customSettingsPath,
+    })}\n`);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedSettingsPath: customSettingsPath,
+        enableLegacyFallback: true,
+      }),
+      legacyStatePath,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
