@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+### Minor Changes
+
+- Add an explicitly activated PromptRail Infinite mode for Codex and Claude Code while preserving Plugins as the default installation path.
+- Let users select `promptrail/infinite` or an admitted direct free model from the clients' normal model pickers, backed by the hosted Modal gateway.
+- Keep custom Claude profiles isolated by reusing legacy Infinite state only when it belongs to the active `settings.json` file.
+
 ## 1.5.0-infinite-beta.0
 
 ### Minor Changes
