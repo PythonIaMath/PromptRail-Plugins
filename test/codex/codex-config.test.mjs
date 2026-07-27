@@ -6,6 +6,7 @@ import test from "node:test";
 import { join } from "node:path";
 
 import {
+  buildInfiniteModelCatalog,
   codexConfigPath,
   installCodexConfig,
   installInfiniteCodexConfig,
@@ -17,6 +18,7 @@ import {
   installStatePath,
   patchCodexConfig,
   patchInfiniteCodexConfig,
+  sha256,
   uninstallCodexConfig,
   uninstallInfiniteCodexConfig,
   unpatchCodexConfig,
@@ -129,6 +131,121 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   );
   assert.match(patched, /model_catalog_json = "\/home\/user\/\.codex\/promptrail-infinite\/models\.json"/);
   assert.doesNotMatch(patched, /127\.0\.0\.1/);
+});
+
+test("builds strict picker entries for tenant-authorized direct free models", () => {
+  const catalog = buildInfiniteModelCatalog([
+    {
+      id: "promptrail/infinite",
+      object: "model",
+    },
+    {
+      id: "promptrail/free-openrouter-cohere--north-mini-code:free",
+      object: "model",
+      routing_mode: "direct-free-v1",
+      display_name: "Free · openrouter · cohere/north-mini-code:free",
+      description: "Direct free actor with no semantic fallback.",
+      context_window: 64_000,
+      max_output_tokens: 8_192,
+      capabilities: {
+        tool_calling: true,
+        vision: false,
+        reasoning: true,
+        streaming: true,
+      },
+    },
+  ]);
+
+  assert.equal(catalog.models.length, 2);
+  const direct = catalog.models[1];
+  assert.equal(direct.slug, "promptrail/free-openrouter-cohere--north-mini-code:free");
+  assert.equal(direct.slug.split("/").length, 2);
+  assert.equal(direct.display_name, "Free · openrouter · cohere/north-mini-code:free");
+  assert.equal(direct.context_window, 64_000);
+  assert.equal(direct.max_context_window, 64_000);
+  assert.deepEqual(direct.input_modalities, ["text"]);
+  assert.equal(direct.visibility, "list");
+  assert.equal(direct.supported_in_api, true);
+  assert.equal(direct.priority, 1);
+});
+
+test("rejects untrusted direct model records before writing the Codex catalog", () => {
+  const base = {
+    object: "model",
+    routing_mode: "direct-free-v1",
+    display_name: "Free model",
+    description: "Direct free actor.",
+    context_window: 64_000,
+    max_output_tokens: 8_192,
+    capabilities: { tool_calling: true, streaming: true },
+  };
+  assert.throws(
+    () => buildInfiniteModelCatalog([{ ...base, id: "promptrail/free/provider/model" }]),
+    /direct model id is invalid/,
+  );
+  assert.throws(
+    () => buildInfiniteModelCatalog([{
+      ...base,
+      id: "promptrail/free-text-only",
+      capabilities: { tool_calling: false, streaming: true },
+    }]),
+    /not coding-harness compatible/,
+  );
+  assert.throws(
+    () => buildInfiniteModelCatalog([{
+      ...base,
+      id: "promptrail/free-header-injection",
+      display_name: "bad\nname",
+    }]),
+    /display name is invalid/,
+  );
+});
+
+test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-refresh-models-"));
+  const configPath = join(directory, "config.toml");
+  const statePath = join(directory, "install-state.json");
+  const catalogPath = join(directory, "models.json");
+  const original = 'model = "gpt-5.6-sol"\n';
+  const dynamicCatalog = buildInfiniteModelCatalog([{
+    id: "promptrail/free-test-coder",
+    object: "model",
+    routing_mode: "direct-free-v1",
+    display_name: "Free · test · coder",
+    description: "Direct free actor.",
+    context_window: 32_000,
+    max_output_tokens: 4_096,
+    capabilities: { tool_calling: true, streaming: true, reasoning: false },
+  }]);
+  await writeFile(configPath, original);
+  try {
+    await installInfiniteCodexConfig(
+      configPath,
+      statePath,
+      "https://gateway.example/v1",
+      catalogPath,
+    );
+    await installInfiniteCodexConfig(
+      configPath,
+      statePath,
+      "https://gateway.example/v1",
+      catalogPath,
+      dynamicCatalog,
+    );
+
+    const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+    const state = JSON.parse(await readFile(statePath, "utf8"));
+    assert.deepEqual(
+      catalog.models.map((model) => model.slug),
+      ["promptrail/infinite", "promptrail/free-test-coder"],
+    );
+    assert.equal(state.modelCatalogSha256, sha256(`${JSON.stringify(dynamicCatalog, null, 2)}\n`));
+    await uninstallInfiniteCodexConfig(statePath);
+    assert.equal(await readFile(configPath, "utf8"), original);
+    await assert.rejects(readFile(catalogPath, "utf8"), { code: "ENOENT" });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("requires HTTPS for every Infinite endpoint", () => {

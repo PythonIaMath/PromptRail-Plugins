@@ -68,7 +68,11 @@ versions, premium-use status, degraded-mode status, and pre-dispatch timing. The
 activated Infinite client configuration enables the documented `executed-model` diagnostic. In
 that mode, the response model, response metadata, and completed stream identify only the provider
 and model that actually generated usable output plus its capacity class and whether a fallback was
-used. Candidate lists, connection IDs, reserve values, credentials, and the internal execution plan
-are not returned to the coding harness.
+used. The authenticated model-discovery endpoint exposes only the tenant's selectable public model
+aliases, human-readable provider/model names, declared context/output limits, and public capability
+flags. It does not expose candidate or connection IDs, credentials, quota or reserve values, ranking
+scores, rejected routes, or the internal execution plan. Selecting a direct-free alias disables
+semantic and subscription fallback for that request; execution receipts still identify the selected
+and executed actor internally without retaining prompt content.
 
 For privacy questions, contact [support@promptrail.ai](mailto:support@promptrail.ai).

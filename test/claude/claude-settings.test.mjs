@@ -76,6 +76,7 @@ test("generates an Infinite Claude configuration without storing a PromptRail ke
   assert.equal(patched.env.KEEP_ME, "yes");
   assert.equal(patched.env.ANTHROPIC_BASE_URL, "https://api.promptrail.ai");
   assert.equal(patched.env.ANTHROPIC_MODEL, "promptrail/infinite");
+  assert.equal(patched.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, "1");
   assert.equal(
     patched.env.ANTHROPIC_CUSTOM_HEADERS,
     "X-PromptRail-Diagnostics: executed-model",
@@ -125,6 +126,15 @@ test("normalizes the shared Modal endpoint for Claude's Anthropic paths", () => 
 });
 
 test("refuses to replace an unrelated Claude model or gateway for Infinite", () => {
+  assert.throws(
+    () => patchInfiniteClaudeSettings(
+      JSON.stringify({ env: { CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "0" } }),
+      undefined,
+      undefined,
+      CLEAN_ENVIRONMENT,
+    ),
+    /explicitly disabled/,
+  );
   assert.throws(
     () => patchInfiniteClaudeSettings(
       JSON.stringify({ env: { ANTHROPIC_MODEL: "other" } }),

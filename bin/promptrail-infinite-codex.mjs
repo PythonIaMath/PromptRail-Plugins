@@ -3,12 +3,16 @@
 import { unlink } from "node:fs/promises";
 
 import {
+  buildInfiniteModelCatalog,
+  INFINITE_MODEL_CATALOG,
+  infiniteBaseUrl,
   infiniteInstallStatePath,
   infiniteCodexStatus,
   installInfiniteCodexConfig,
   resolveInfiniteInstallStatePath,
   uninstallInfiniteCodexConfig,
 } from "../lib/codex-config.mjs";
+import { fetchInfiniteModelRecords } from "../lib/infinite-model-discovery.mjs";
 
 async function unlinkIfExists(path) {
   try {
@@ -23,9 +27,28 @@ async function unlinkIfExists(path) {
 async function main() {
   const command = process.argv[2];
   if (command === "install") {
-    const installed = await installInfiniteCodexConfig();
+    const apiKey = String(process.env.PROMPTRAIL_API_KEY || "").trim();
+    let modelCatalog = INFINITE_MODEL_CATALOG;
+    if (apiKey) {
+      const records = await fetchInfiniteModelRecords({
+        baseUrl: infiniteBaseUrl(),
+        apiKey,
+      });
+      modelCatalog = buildInfiniteModelCatalog(records);
+    }
+    const installed = await installInfiniteCodexConfig(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      modelCatalog,
+    );
+    const directModels = Math.max(modelCatalog.models.length - 1, 0);
     process.stdout.write(
-      `PromptRail Infinite Codex configuration installed: ${installed.path}\nSet PROMPTRAIL_API_KEY in your user environment before using it.\n`,
+      `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
+      + (apiKey
+        ? `${directModels} direct free model${directModels === 1 ? "" : "s"} added to /model. Restart Codex to reload the catalog.\n`
+        : "Set PROMPTRAIL_API_KEY, then run the Infinite install again to add direct free models to /model.\n"),
     );
     return;
   }

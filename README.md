@@ -18,8 +18,9 @@ loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the 
 
 `infinite` is the PromptRail provider mode. The public package provides safe configuration only;
 the current usable target is an explicitly deployed private Modal-hosted beta, not a public hosted
-production endpoint. It uses the single virtual model name `promptrail/infinite`, never starts the
-existing Plugins proxy, and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
+production endpoint. It keeps `promptrail/infinite` as the default automatic model and can add
+tenant-authorized direct-free aliases to the client model picker. It never starts the existing
+Plugins proxy and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
 It is never activated by the default installer, by the presence of an Infinite API key, or by an
 upgrade. The user must explicitly run the Infinite install or switch command.
 
@@ -72,13 +73,15 @@ npm exec --yes --prefer-online --package=@promptrail/plugins@latest -- promptrai
 When Infinite access is available, its separate configuration can be generated explicitly:
 
 ```bash
+export PROMPTRAIL_API_KEY="..."
 npx --yes @promptrail/plugins@latest install infinite both
 ```
 
 This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
-Code with the PromptRail base URL and model. Set `PROMPTRAIL_API_KEY` in your user environment;
-the installer does not store it. Claude Code receives it through a user-only `apiKeyHelper` that
-reads the environment variable at runtime. Installation refuses unrelated Anthropic credential
+Code with the PromptRail base URL and model. The key is used transiently during Codex installation
+to download that tenant's current model catalog; the installer does not store it. Claude Code
+receives it through a user-only `apiKeyHelper` that reads the environment variable at runtime.
+Installation refuses unrelated Anthropic credential
 variables, key helpers, models, or gateways instead of overriding them. Switching modes is explicit
 and first restores the other mode's managed settings:
 
@@ -88,14 +91,32 @@ npx --yes @promptrail/plugins@latest switch infinite
 ```
 
 The explicit Infinite configuration also sends
-`X-PromptRail-Diagnostics: executed-model`. The requested model remains
+`X-PromptRail-Diagnostics: executed-model`. The default requested model remains
 `promptrail/infinite`, so Codex's model selector and footer keep showing that stable virtual model.
 For every completed Codex LLM call, the transcript adds a dim line such as
 `Executed by openrouter/cohere/north-mini-code:free · free` or `... · subscription reserve` before
 the actor's output. Tool-result continuations get their own line because they are separate model
 calls. These display-only protocol items are removed before the next provider request. This exposes
-no candidate list, credential ID, reserve level, or internal fallback plan. Plugins mode does not
-send this header.
+no credential ID, reserve level, or internal fallback plan. Plugins mode does not send this header.
+
+### Selecting a free model directly
+
+After Infinite is installed, enter `/model` in Codex or Claude Code. The picker contains:
+
+- `PromptRail Infinite · automatic`, which keeps free-first semantic routing and protected
+  subscription continuity;
+- one `Free · provider · model` entry for each currently healthy, zero-cost, tool-capable actor
+  admitted for that tenant.
+
+Codex reads a user-only catalog downloaded during `install infinite`; rerun the same install command
+and restart Codex after the hosted catalog changes. Claude Code enables native gateway model
+discovery and reads the current list when its picker refreshes.
+
+A direct-free choice is intentionally strict. PromptRail may retry another credential for the exact
+same provider/model, but it cannot substitute another semantic model and cannot use the user's
+subscription. If that actor is down, out of quota, or incompatible with the current request's tools,
+context, modality, reasoning, or output limit, the call returns a clear error. Select
+`PromptRail Infinite · automatic` again when continuity is more important than pinning one actor.
 
 ### Modal-hosted beta
 
