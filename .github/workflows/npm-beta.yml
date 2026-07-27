@@ -1,0 +1,80 @@
+name: Publish npm Infinite beta
+
+on:
+  push:
+    tags:
+      - "npm-infinite-beta-v*"
+
+concurrency:
+  group: npm-infinite-beta-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Test and publish prerelease
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Validate isolated beta release
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+          const lockfile = JSON.parse(readFileSync("package-lock.json", "utf8"));
+          const expectedTag = `npm-infinite-beta-v${manifest.version}`;
+          const betaPattern = /^\d+\.\d+\.\d+-infinite-beta\.\d+$/;
+
+          if (!betaPattern.test(manifest.version)) {
+            throw new Error(`Refusing to publish non-beta version: ${manifest.version}`);
+          }
+          if (process.env.GITHUB_REF_NAME !== expectedTag) {
+            throw new Error(`Tag ${process.env.GITHUB_REF_NAME} does not match ${expectedTag}`);
+          }
+          if (lockfile.version !== manifest.version || lockfile.packages?.[""]?.version !== manifest.version) {
+            throw new Error("package-lock.json version does not match package.json");
+          }
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Inspect package contents
+        run: npm pack --dry-run
+
+      - name: Check npm registry
+        id: registry
+        run: |
+          package_name=$(node -p "require('./package.json').name")
+          package_version=$(node -p "require('./package.json').version")
+          if npm view "${package_name}@${package_version}" version --json >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish under isolated beta tag
+        if: steps.registry.outputs.already_published != 'true'
+        run: npm publish --tag infinite-beta --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Report existing immutable version
+        if: steps.registry.outputs.already_published == 'true'
+        run: echo "This exact npm version is already published; no registry mutation was needed."
