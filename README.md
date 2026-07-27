@@ -14,15 +14,16 @@ services and production infrastructure remain separate from this repository.
 ## Product modes
 
 `plugins` is the existing product: it keeps provider inference on the user's machine through a
-loopback proxy and uses their ChatGPT or claude.ai subscription. It remains the default mode.
+loopback proxy and uses their ChatGPT or claude.ai subscription. It remains available through the
+explicit `install plugins` and `switch plugins` commands.
 
 `infinite` is the PromptRail provider mode. The public package provides safe configuration only;
 the current usable target is an explicitly deployed private Modal-hosted beta, not a public hosted
 production endpoint. It keeps `promptrail/infinite` as the default automatic model and can add
 tenant-authorized direct-free aliases to the client model picker. It never starts the existing
 Plugins proxy and never writes `PROMPTRAIL_API_KEY` to a project or configuration file.
-It is never activated by the default installer, by the presence of an Infinite API key, or by an
-upgrade. The user must explicitly run the Infinite install or switch command.
+It is the default mode for new installs. Running the bare package command safely switches existing
+managed Plugins installations to Infinite before installing the hosted configuration.
 
 ## Plugins
 
@@ -34,23 +35,28 @@ upgrade. The user must explicitly run the Infinite install or switch command.
 Both integrations fail visibly when routing, authentication, or protocol validation fails. They
 do not silently select a default effort or switch to API billing.
 
-## Quick install
+## Quick install or migration
 
-Install both integrations with one shared PromptRail token:
+Install Infinite for both clients, or safely migrate an existing managed Plugins installation:
 
 ```bash
+export PROMPTRAIL_API_KEY="..."
 npx --yes @promptrail/plugins@latest
 ```
 
-Do not use `npm i @promptrail/plugins` as the setup command. npm runs dependency lifecycle scripts
-without a reliable interactive terminal, so it cannot safely request the access token. Use the
-`npx` command above, which opens the secure token prompt directly.
+Do not use `npm i @promptrail/plugins` as the setup command: it only downloads the package and does
+not run PromptRail's safe configuration migration. Use the `npx` command above.
 
-This is equivalent to `npx --yes @promptrail/plugins@latest install plugins both`. The installer asks for your token
-without echoing it. For automated installs:
+The bare command is equivalent to `npx --yes @promptrail/plugins@latest switch infinite both`.
+It restores the package-managed Plugins configuration first, preserves unrelated user settings,
+then installs Infinite. The API key remains in the user's environment and is never written to a
+project file.
+
+To install the local Plugins mode instead, select it explicitly. The installer asks for its token
+without echoing it:
 
 ```bash
-PROMPTRAIL_ACCESS_TOKEN="..." npx --yes @promptrail/plugins@latest
+PROMPTRAIL_ACCESS_TOKEN="..." npx --yes @promptrail/plugins@latest install plugins both
 ```
 Get your access token at [promptrail.ai/plugins](https://www.promptrail.ai/plugins).
 
@@ -65,12 +71,12 @@ If a machine previously cached an older PromptRail release, force npm to refresh
 uninstalling:
 
 ```bash
-npm exec --yes --prefer-online --package=@promptrail/plugins@latest -- promptrail uninstall codex
+npm exec --yes --prefer-online --package=@promptrail/plugins@latest -- promptrail uninstall plugins codex
 ```
 
-## Infinite configuration preview
+## Infinite configuration
 
-When Infinite access is available, its separate configuration can be generated explicitly:
+The equivalent explicit Infinite install command is:
 
 ```bash
 export PROMPTRAIL_API_KEY="..."
@@ -147,7 +153,7 @@ down, or the request-specific predicted success of the best free actor is below 
 floor, the gateway selects the subscription directly without first spending a free-provider call.
 If protected subscription reserve is unavailable, it continues with free capacity or returns a
 clear no-capacity error.
-Existing Plugins users are never migrated automatically; switching back remains explicit:
+The bare installer migrates existing Plugins users to Infinite. Switching back remains explicit:
 
 ```bash
 npx --yes @promptrail/plugins@latest switch plugins codex

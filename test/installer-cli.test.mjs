@@ -17,10 +17,28 @@ function outputBuffer() {
   };
 }
 
-test("defaults every top-level install invocation to both clients", () => {
-  assert.deepEqual(parseCliArgs([]), { command: "install", mode: "plugins", target: "both", options: {} });
-  assert.deepEqual(parseCliArgs(["install"]), { command: "install", mode: "plugins", target: "both", options: {} });
+test("defaults the bare command to an Infinite migration and implicit modes to Infinite", () => {
+  assert.deepEqual(parseCliArgs([]), { command: "switch", mode: "infinite", target: "both", options: {} });
+  assert.deepEqual(parseCliArgs(["install"]), { command: "install", mode: "infinite", target: "both", options: {} });
   assert.deepEqual(parseCliArgs(["install", "both"]), {
+    command: "install",
+    mode: "infinite",
+    target: "both",
+    options: {},
+  });
+  assert.deepEqual(parseCliArgs(["status", "both"]), {
+    command: "status",
+    mode: "infinite",
+    target: "both",
+    options: {},
+  });
+  assert.deepEqual(parseCliArgs(["uninstall", "both"]), {
+    command: "uninstall",
+    mode: "infinite",
+    target: "both",
+    options: {},
+  });
+  assert.deepEqual(parseCliArgs(["install", "plugins", "both"]), {
     command: "install",
     mode: "plugins",
     target: "both",
@@ -71,7 +89,7 @@ test("passes secrets through child environment, never command arguments", async 
   const calls = [];
   const output = outputBuffer();
   const status = await runCli({
-    argv: ["install", "both"],
+    argv: ["install", "plugins", "both"],
     env: {
       PROMPTRAIL_ACCESS_TOKEN: "router-secret",
       PROMPTRAIL_API_KEY: "infinite-secret-that-must-stay-isolated",
@@ -124,14 +142,14 @@ test("prints help without starting a child installer", async () => {
 
   assert.equal(status, 0);
   assert.equal(spawned, false);
-  assert.match(output.value(), /promptrail install \[plugins\] both/);
+  assert.match(output.value(), /promptrail install \[infinite\] both/);
 });
 
 test("installs both client routers with one shared token", async () => {
   const calls = [];
   const output = outputBuffer();
   const status = await runCli({
-    argv: ["install", "both"],
+    argv: ["install", "plugins", "both"],
     env: { PROMPTRAIL_ACCESS_TOKEN: "router-secret" },
     input: {},
     output: output.stream,
@@ -210,6 +228,54 @@ test("switches by uninstalling the previous mode before installing the selected 
   ]);
   assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
   assert.match(calls[2].args[0], /promptrail-infinite-codex\.mjs$/);
+});
+
+test("the bare command safely migrates Plugins to Infinite", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: [],
+    env: {},
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    spawn(command, args) {
+      calls.push({ command, args });
+      return { status: 0 };
+    },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls.map((call) => call.args.slice(1)), [
+    ["uninstall", "--switch-if-installed"],
+    ["uninstall", "--switch-if-installed"],
+    ["install"],
+    ["install"],
+  ]);
+  assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
+  assert.match(calls[1].args[0], /promptrail-claude-router\.mjs$/);
+  assert.match(calls[2].args[0], /promptrail-infinite-codex\.mjs$/);
+  assert.match(calls[3].args[0], /promptrail-infinite-claude\.mjs$/);
+});
+
+test("the bare migration never installs Infinite after Plugins cleanup fails", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: [],
+    env: {},
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    spawn(command, args) {
+      calls.push({ command, args });
+      return { status: 17 };
+    },
+  });
+  assert.equal(status, 17);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].args[0], /promptrail-codex-router\.mjs$/);
+  assert.deepEqual(calls[0].args.slice(1), ["uninstall", "--switch-if-installed"]);
+  assert.match(output.value(), /uninstall failed for plugins codex/);
 });
 
 test("switches only the explicitly requested client", async () => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.1
+
+### Patch Changes
+
+- Make Infinite the default for bare and implicit-mode CLI commands. The bare command now uses the safe mode-switch path to restore managed Plugins configuration before installing Infinite; Plugins remains available explicitly.
+- Keep custom Codex profiles isolated by reusing legacy Infinite state only when it belongs to the active `config.toml` file.
+
 ## 1.5.0
 
 ### Minor Changes

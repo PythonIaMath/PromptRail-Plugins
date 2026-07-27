@@ -1,7 +1,7 @@
 {
   "name": "@promptrail/plugins",
-  "version": "1.5.0",
-  "description": "PromptRail integrations for Codex and Claude Code, with subscription-based Plugins mode and an explicitly activated hosted Infinite mode.",
+  "version": "1.5.1",
+  "description": "PromptRail Infinite for Codex and Claude Code, with hosted free-first routing and an explicit local Plugins mode.",
   "type": "module",
   "bin": {
     "plugins": "bin/promptrail.mjs",

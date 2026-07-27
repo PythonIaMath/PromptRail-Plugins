@@ -46,6 +46,6 @@ test("README avoids stale bare npx package specs", async () => {
   assert.doesNotMatch(readme, /npx(?: --yes)? @promptrail\/plugins(?!@)/);
   assert.match(
     readme,
-    /npm exec --yes --prefer-online --package=@promptrail\/plugins@latest -- promptrail uninstall codex/,
+    /npm exec --yes --prefer-online --package=@promptrail\/plugins@latest -- promptrail uninstall plugins codex/,
   );
 });

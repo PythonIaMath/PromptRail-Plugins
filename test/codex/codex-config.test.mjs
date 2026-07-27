@@ -18,6 +18,7 @@ import {
   installStatePath,
   patchCodexConfig,
   patchInfiniteCodexConfig,
+  resolveInfiniteInstallStatePath,
   sha256,
   uninstallCodexConfig,
   uninstallInfiniteCodexConfig,
@@ -69,6 +70,68 @@ test("keeps Infinite state inside CODEX_HOME without moving existing Plugins sta
         process.env[key] = value;
       }
     }
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("custom Codex profiles ignore legacy Infinite state owned by another config", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-codex-profile-"));
+  const preferredStatePath = join(directory, "custom-install-state.json");
+  const legacyStatePath = join(directory, "legacy-install-state.json");
+  const customConfigPath = join(directory, "custom-config.toml");
+  try {
+    await writeFile(legacyStatePath, `${JSON.stringify({
+      configPath: join(directory, "unrelated-config.toml"),
+    })}\n`);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedConfigPath: customConfigPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+    await writeFile(legacyStatePath, "{malformed");
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedConfigPath: customConfigPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+    await unlink(legacyStatePath);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedConfigPath: customConfigPath,
+        enableLegacyFallback: true,
+      }),
+      preferredStatePath,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("custom Codex profiles reuse legacy Infinite state only when ownership matches", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-codex-legacy-"));
+  const preferredStatePath = join(directory, "custom-install-state.json");
+  const legacyStatePath = join(directory, "legacy-install-state.json");
+  const customConfigPath = join(directory, "custom-config.toml");
+  try {
+    await writeFile(legacyStatePath, `${JSON.stringify({
+      configPath: customConfigPath,
+    })}\n`);
+    assert.equal(
+      await resolveInfiniteInstallStatePath(preferredStatePath, {
+        legacyPath: legacyStatePath,
+        expectedConfigPath: customConfigPath,
+        enableLegacyFallback: true,
+      }),
+      legacyStatePath,
+    );
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
