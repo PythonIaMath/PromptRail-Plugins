@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0-infinite-beta.0
+
+### Minor Changes
+
+- Add an explicitly activated PromptRail Infinite beta for Codex and Claude Code while preserving the existing Plugins mode and default installer behavior.
+- Let users select `promptrail/infinite` or an admitted direct free model from the clients' normal model pickers, with hosted Modal configuration and safe switching, status, upgrade, and uninstall flows.
+
 ## 1.4.2
 
 ### Patch Changes
