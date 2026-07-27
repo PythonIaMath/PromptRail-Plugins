@@ -1,7 +1,7 @@
 {
   "name": "@promptrail/plugins",
-  "version": "1.4.2",
-  "description": "Open-source PromptRail subscription-only model and reasoning-effort routers for Codex and Claude Code.",
+  "version": "1.5.0-infinite-beta.0",
+  "description": "PromptRail integrations for Codex and Claude Code, with subscription-based Plugins mode and an explicitly activated hosted Infinite beta.",
   "type": "module",
   "bin": {
     "plugins": "bin/promptrail.mjs",
