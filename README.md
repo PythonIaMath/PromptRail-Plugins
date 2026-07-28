@@ -75,6 +75,11 @@ npx --yes @promptrail/plugins@latest status both
 npx --yes @promptrail/plugins@latest uninstall both
 ```
 
+Without an explicit mode, `status` checks both product modes and `uninstall` safely removes any
+PromptRail-managed Infinite or Plugins installation. Use `status infinite both`,
+`status plugins both`, `uninstall infinite both`, or `uninstall plugins both` when you want to
+target only one mode.
+
 If a machine previously cached an older PromptRail release, force npm to refresh registry metadata before
 uninstalling:
 

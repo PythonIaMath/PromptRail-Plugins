@@ -133,6 +133,14 @@ test("normalizes the shared Modal endpoint for Claude's Anthropic paths", () => 
     /without credentials/,
   );
   assert.throws(
+    () => infiniteClaudeBaseUrl("https://gateway.example/v1?token=secret"),
+    /query/,
+  );
+  assert.throws(
+    () => infiniteClaudeBaseUrl("https://gateway.example/v1#fragment"),
+    /fragment/,
+  );
+  assert.throws(
     () => infiniteClaudeBaseUrl("http://127.0.0.1:8787/v1"),
     /HTTPS/,
   );

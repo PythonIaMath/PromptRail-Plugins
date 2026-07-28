@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -38,4 +38,14 @@ test("credential upgrade never recreates a missing pre-existing artifact", async
     }),
     /pre-existing PromptRail token file is missing/,
   );
+});
+
+test("credential installation repairs the private directory mode", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-credential-mode-"));
+  const statePath = join(directory, "install-state.json");
+  await chmod(directory, 0o755);
+
+  await installInfiniteCredentials({ apiKey: "private-token", statePath });
+
+  assert.equal((await stat(directory)).mode & 0o777, 0o700);
 });

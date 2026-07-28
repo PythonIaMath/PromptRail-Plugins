@@ -7,7 +7,8 @@
 - 245e2e3: Persist the PromptRail Infinite token in user-only credential files, authenticate Codex and Claude
   through command helpers, preflight tokens before mode switches, use the hosted Modal gateway by
   default, and continue through compatible free capacity when subscription credentials are
-  unavailable. Safe uninstall removes only unchanged PromptRail-owned credentials.
+  unavailable. Safe uninstall removes only unchanged PromptRail-owned credentials, and implicit
+  `status`/`uninstall` commands cover both Infinite and legacy Plugins installations.
 
 ## 1.5.2
 

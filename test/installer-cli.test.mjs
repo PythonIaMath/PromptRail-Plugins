@@ -25,7 +25,7 @@ function outputBuffer() {
   };
 }
 
-test("defaults the bare command to an Infinite migration and implicit modes to Infinite", () => {
+test("defaults installs to Infinite while implicit status and uninstall inspect both modes", () => {
   assert.deepEqual(parseCliArgs([]), { command: "switch", mode: "infinite", target: "both", options: {} });
   assert.deepEqual(parseCliArgs(["install"]), { command: "install", mode: "infinite", target: "both", options: {} });
   assert.deepEqual(parseCliArgs(["install", "both"]), {
@@ -36,13 +36,13 @@ test("defaults the bare command to an Infinite migration and implicit modes to I
   });
   assert.deepEqual(parseCliArgs(["status", "both"]), {
     command: "status",
-    mode: "infinite",
+    mode: "all",
     target: "both",
     options: {},
   });
   assert.deepEqual(parseCliArgs(["uninstall", "both"]), {
     command: "uninstall",
-    mode: "infinite",
+    mode: "all",
     target: "both",
     options: {},
   });
@@ -52,6 +52,39 @@ test("defaults the bare command to an Infinite migration and implicit modes to I
     target: "both",
     options: {},
   });
+});
+
+test("implicit status and uninstall cover Infinite and legacy Plugins installations", async () => {
+  for (const command of ["status", "uninstall"]) {
+    const calls = [];
+    const output = outputBuffer();
+    const status = await runCli({
+      argv: [command, "both"],
+      env: {},
+      input: {},
+      output: output.stream,
+      errorOutput: output.stream,
+      spawn(executable, args) {
+        calls.push({ executable, args });
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(status, 0);
+    assert.equal(calls.length, 4);
+    assert.match(calls[0].args[0], /promptrail-infinite-codex\.mjs$/);
+    assert.match(calls[1].args[0], /promptrail-infinite-claude\.mjs$/);
+    assert.match(calls[2].args[0], /promptrail-codex-router\.mjs$/);
+    assert.match(calls[3].args[0], /promptrail-claude-router\.mjs$/);
+    assert.deepEqual(calls.slice(0, 2).map((call) => call.args.slice(1)), [
+      [command],
+      [command],
+    ]);
+    assert.deepEqual(calls.slice(2).map((call) => call.args.slice(1)), [
+      command === "uninstall" ? [command, "--switch-if-installed"] : [command],
+      command === "uninstall" ? [command, "--switch-if-installed"] : [command],
+    ]);
+  }
 });
 
 test("parses explicit Infinite installs and safe mode switches", () => {

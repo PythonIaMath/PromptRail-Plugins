@@ -281,6 +281,14 @@ test("rejects untrusted direct model records before writing the Codex catalog", 
     }]),
     /display name is invalid/,
   );
+  assert.throws(
+    () => buildInfiniteModelCatalog([{
+      ...base,
+      id: "promptrail/direct-terminal-injection",
+      display_name: "bad\u001b[31mname",
+    }]),
+    /display name is invalid/,
+  );
 });
 
 test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe", async () => {
@@ -335,6 +343,8 @@ test("requires HTTPS for every Infinite endpoint", () => {
   assert.throws(() => infiniteBaseUrl("http://127.0.0.1:8787/v1"), /HTTPS/);
   assert.throws(() => infiniteBaseUrl("file:///tmp/service"), /HTTPS/);
   assert.throws(() => infiniteBaseUrl("https://user:secret@example.test"), /without credentials/);
+  assert.throws(() => infiniteBaseUrl("https://example.test/v1?token=secret"), /query/);
+  assert.throws(() => infiniteBaseUrl("https://example.test/v1#fragment"), /fragment/);
 });
 
 test("removes only managed Infinite Codex settings after a user edit", () => {
@@ -484,7 +494,7 @@ test("rolls back the Codex config when an Infinite upgrade cannot commit state",
       catalogPath,
     );
     const installed = await readFile(configPath, "utf8");
-    await chmod(stateDirectory, 0o500);
+    await chmod(configDirectory, 0o500);
     await assert.rejects(
       () => installInfiniteCodexConfig(
         configPath,
@@ -496,7 +506,7 @@ test("rolls back the Codex config when an Infinite upgrade cannot commit state",
     );
     assert.equal(await readFile(configPath, "utf8"), installed);
   } finally {
-    await chmod(stateDirectory, 0o700).catch(() => {});
+    await chmod(configDirectory, 0o700).catch(() => {});
     await rm(directory, { recursive: true, force: true });
   }
 });
