@@ -49,3 +49,19 @@ test("README avoids stale bare npx package specs", async () => {
     /npm exec --yes --prefer-online --package=@promptrail\/plugins@latest -- promptrail uninstall plugins codex/,
   );
 });
+
+test("stable tags verify the Changesets release without publishing a second time", async () => {
+  const stableWorkflow = await readFile(
+    new URL("../.github/workflows/npm-stable.yml", import.meta.url),
+    "utf8",
+  );
+  const releaseWorkflow = await readFile(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(stableWorkflow, /Verify the Changesets release/);
+  assert.doesNotMatch(stableWorkflow, /npm publish/);
+  assert.doesNotMatch(stableWorkflow, /NPM_TOKEN|NODE_AUTH_TOKEN|id-token:\s*write/);
+  assert.match(releaseWorkflow, /publish:\s*npm run release/);
+});
