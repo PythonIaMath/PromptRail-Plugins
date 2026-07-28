@@ -196,18 +196,18 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.doesNotMatch(patched, /127\.0\.0\.1/);
 });
 
-test("builds strict picker entries for tenant-authorized direct free models", () => {
+test("builds strict picker entries for tenant-authorized direct models", () => {
   const catalog = buildInfiniteModelCatalog([
     {
       id: "promptrail/infinite",
       object: "model",
     },
     {
-      id: "promptrail/free-openrouter-cohere--north-mini-code:free",
+      id: "promptrail/direct-openrouter-cohere--north-mini-code",
       object: "model",
       routing_mode: "direct-free-v1",
-      display_name: "Free · openrouter · cohere/north-mini-code:free",
-      description: "Direct free actor with no semantic fallback.",
+      display_name: "openrouter · cohere/north-mini-code",
+      description: "Direct actor with no semantic fallback.",
       context_window: 64_000,
       max_output_tokens: 8_192,
       capabilities: {
@@ -221,9 +221,10 @@ test("builds strict picker entries for tenant-authorized direct free models", ()
 
   assert.equal(catalog.models.length, 2);
   const direct = catalog.models[1];
-  assert.equal(direct.slug, "promptrail/free-openrouter-cohere--north-mini-code:free");
+  assert.equal(direct.slug, "promptrail/direct-openrouter-cohere--north-mini-code");
   assert.equal(direct.slug.split("/").length, 2);
-  assert.equal(direct.display_name, "Free · openrouter · cohere/north-mini-code:free");
+  assert.equal(direct.display_name, "openrouter · cohere/north-mini-code");
+  assert.doesNotMatch(`${direct.slug} ${direct.display_name} ${direct.description}`, /free/i);
   assert.equal(direct.context_window, 64_000);
   assert.equal(direct.max_context_window, 64_000);
   assert.deepEqual(direct.input_modalities, ["text"]);
@@ -236,20 +237,20 @@ test("rejects untrusted direct model records before writing the Codex catalog", 
   const base = {
     object: "model",
     routing_mode: "direct-free-v1",
-    display_name: "Free model",
-    description: "Direct free actor.",
+    display_name: "Direct model",
+    description: "Direct actor.",
     context_window: 64_000,
     max_output_tokens: 8_192,
     capabilities: { tool_calling: true, streaming: true },
   };
   assert.throws(
-    () => buildInfiniteModelCatalog([{ ...base, id: "promptrail/free/provider/model" }]),
+    () => buildInfiniteModelCatalog([{ ...base, id: "promptrail/direct/provider/model" }]),
     /direct model id is invalid/,
   );
   assert.throws(
     () => buildInfiniteModelCatalog([{
       ...base,
-      id: "promptrail/free-text-only",
+      id: "promptrail/direct-text-only",
       capabilities: { tool_calling: false, streaming: true },
     }]),
     /not coding-harness compatible/,
@@ -257,7 +258,7 @@ test("rejects untrusted direct model records before writing the Codex catalog", 
   assert.throws(
     () => buildInfiniteModelCatalog([{
       ...base,
-      id: "promptrail/free-header-injection",
+      id: "promptrail/direct-header-injection",
       display_name: "bad\nname",
     }]),
     /display name is invalid/,
@@ -271,11 +272,11 @@ test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe"
   const catalogPath = join(directory, "models.json");
   const original = 'model = "gpt-5.6-sol"\n';
   const dynamicCatalog = buildInfiniteModelCatalog([{
-    id: "promptrail/free-test-coder",
+    id: "promptrail/direct-test-coder",
     object: "model",
     routing_mode: "direct-free-v1",
-    display_name: "Free · test · coder",
-    description: "Direct free actor.",
+    display_name: "test · coder",
+    description: "Direct actor.",
     context_window: 32_000,
     max_output_tokens: 4_096,
     capabilities: { tool_calling: true, streaming: true, reasoning: false },
@@ -300,7 +301,7 @@ test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe"
     const state = JSON.parse(await readFile(statePath, "utf8"));
     assert.deepEqual(
       catalog.models.map((model) => model.slug),
-      ["promptrail/infinite", "promptrail/free-test-coder"],
+      ["promptrail/infinite", "promptrail/direct-test-coder"],
     );
     assert.equal(state.modelCatalogSha256, sha256(`${JSON.stringify(dynamicCatalog, null, 2)}\n`));
     await uninstallInfiniteCodexConfig(statePath);

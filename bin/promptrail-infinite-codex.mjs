@@ -47,8 +47,8 @@ async function main() {
     process.stdout.write(
       `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
       + (apiKey
-        ? `${directModels} direct free model${directModels === 1 ? "" : "s"} added to /model. Restart Codex to reload the catalog.\n`
-        : "Set PROMPTRAIL_API_KEY, then run the Infinite install again to add direct free models to /model.\n"),
+        ? `${directModels} direct model${directModels === 1 ? "" : "s"} added to /model. Restart Codex to reload the catalog.\n`
+        : "Set PROMPTRAIL_API_KEY, then run the Infinite install again to add direct models to /model.\n"),
     );
     return;
   }

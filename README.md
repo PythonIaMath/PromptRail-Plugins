@@ -100,7 +100,7 @@ The explicit Infinite configuration also sends
 `X-PromptRail-Diagnostics: executed-model`. The default requested model remains
 `promptrail/infinite`, so Codex's model selector and footer keep showing that stable virtual model.
 For every completed Codex LLM call, the transcript adds a dim line such as
-`Executed by openrouter/cohere/north-mini-code:free · free` or `... · subscription reserve` before
+`Executed by openrouter/cohere/north-mini-code` or `... · subscription reserve` before
 the actor's output. Tool-result continuations get their own line because they are separate model
 calls. These display-only protocol items are removed before the next provider request. This exposes
 no credential ID, reserve level, or internal fallback plan. Plugins mode does not send this header.
@@ -109,9 +109,9 @@ no credential ID, reserve level, or internal fallback plan. Plugins mode does no
 
 After Infinite is installed, enter `/model` in Codex or Claude Code. The picker contains:
 
-- `PromptRail Infinite · automatic`, which keeps free-first semantic routing and protected
+- `PromptRail Infinite · automatic`, which keeps automatic semantic routing and protected
   subscription continuity;
-- one `Free · provider · model` entry for each currently healthy, zero-cost, tool-capable actor
+- one `provider · model` entry for each currently healthy, zero-cost, tool-capable actor
   admitted for that tenant.
 
 Codex reads a user-only catalog downloaded during `install infinite`; rerun the same install command
