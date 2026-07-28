@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, rmdir, unlink } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
+import { delimiter, dirname, join, resolve } from "node:path";
 
 import {
   installCodexConfig,
@@ -16,6 +17,7 @@ import {
   DEFAULT_HOST,
   DEFAULT_PORT,
   installModelCatalog,
+  routerHome,
   routerConfigPath,
   routerModelCatalogPath,
   saveRouterConfig,
@@ -25,6 +27,12 @@ import { installUserService, uninstallUserService } from "../lib/codex-user-serv
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let resolvedCodexBinary;
+
+async function ensureCodexHome() {
+  if (process.env.CODEX_HOME) {
+    await mkdir(process.env.CODEX_HOME, { recursive: true, mode: 0o700 });
+  }
+}
 
 function option(name) {
   const index = process.argv.indexOf(name);
@@ -36,19 +44,33 @@ function codexBinary() {
     return resolvedCodexBinary;
   }
   const explicit = process.env.CODEX_BIN || process.env.CODEX_CLI_PATH;
+  const executableNames = process.platform === "win32"
+    ? ["codex.exe", "codex.cmd", "codex"]
+    : ["codex"];
+  const pathCandidates = String(process.env.PATH || "")
+    .split(delimiter)
+    .filter(Boolean)
+    .flatMap((directory) => executableNames.map((name) => resolve(directory, name)));
   const candidates = explicit
     ? [explicit]
-    : [
+    : [...new Set([
         "codex",
+        ...pathCandidates,
+        join(homedir(), ".npm-global", "bin", "codex"),
+        join(homedir(), ".local", "bin", "codex"),
         ...(process.platform === "darwin"
-          ? ["/Applications/Codex.app/Contents/Resources/codex"]
+          ? [
+              "/opt/homebrew/bin/codex",
+              "/usr/local/bin/codex",
+              "/Applications/Codex.app/Contents/Resources/codex",
+            ]
           : []),
-      ];
+      ])];
   for (const candidate of candidates) {
     if (candidate.includes("/") && !existsSync(candidate)) {
       continue;
     }
-    const result = spawnSync(candidate, ["plugin", "--help"], { encoding: "utf8" });
+    const result = spawnSync(candidate, ["plugin", "marketplace", "--help"], { encoding: "utf8" });
     if (!result.error && result.status === 0) {
       resolvedCodexBinary = candidate;
       if (candidate !== "codex") {
@@ -97,6 +119,28 @@ function hasPromptRailMarketplace() {
   return marketplaces.marketplaces?.some((entry) => entry.name === "promptrail") || false;
 }
 
+function pluginRegistryHasPromptRail() {
+  const pluginRoot = join(
+    process.env.CODEX_HOME || join(homedir(), ".codex"),
+    "plugins",
+  );
+  for (const filename of ["installed_plugins.json", "known_marketplaces.json"]) {
+    const path = join(pluginRoot, filename);
+    if (!existsSync(path)) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(readFileSync(path, "utf8"));
+    } catch (error) {
+      throw new Error(`Cannot safely inspect Codex plugin state at ${path}.`, { cause: error });
+    }
+    if (JSON.stringify(parsed).toLowerCase().includes("promptrail")) return true;
+  }
+  return [
+    join(pluginRoot, "cache", "promptrail"),
+    join(pluginRoot, "marketplaces", "promptrail"),
+  ].some((path) => existsSync(path));
+}
+
 async function unlinkIfExists(path) {
   try {
     await unlink(path);
@@ -109,7 +153,20 @@ async function unlinkIfExists(path) {
   }
 }
 
+async function removeDirectoryIfEmpty(path) {
+  try {
+    await rmdir(path);
+    return true;
+  } catch (error) {
+    if (["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error?.code)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 async function install() {
+  await ensureCodexHome();
   const graderUrl = option("--grader-url") || process.env.PROMPTRAIL_GRADER_URL;
   const routerToken = option("--token") || process.env.PROMPTRAIL_ROUTER_TOKEN;
   if (!graderUrl || !routerToken) {
@@ -167,6 +224,7 @@ async function status() {
 }
 
 async function uninstall() {
+  await ensureCodexHome();
   const failures = [];
   const attempt = async (label, operation) => {
     try {
@@ -177,42 +235,93 @@ async function uninstall() {
     }
   };
 
+  const hadRouterArtifacts = [
+    installStatePath(),
+    routerConfigPath(),
+    routerModelCatalogPath(),
+    join(routerHome(), "proxy.log"),
+    join(routerHome(), "proxy.pid"),
+  ].some((path) => existsSync(path));
+  const hasCustomRouterScope = Boolean(
+    process.env.CODEX_HOME
+    || process.env.PROMPTRAIL_ROUTER_HOME
+    || process.env.PROMPTRAIL_ROUTER_CONFIG,
+  );
+  let pluginInstalled = false;
+  let marketplaceInstalled = false;
+  if (!process.argv.includes("--skip-plugin-remove")) {
+    try {
+      pluginInstalled = hasInstalledPlugin();
+      marketplaceInstalled = hasPromptRailMarketplace();
+    } catch (error) {
+      if (process.argv.includes("--switch-if-installed") && !hadRouterArtifacts) {
+        if (pluginRegistryHasPromptRail()) {
+          throw new Error(
+            "Codex is unavailable and its plugin registry still contains PromptRail; refusing an incomplete mode switch.",
+          );
+        }
+      } else {
+        throw new Error(
+          `PromptRail Codex uninstall stopped before changing local state: ${error.message}`,
+        );
+      }
+    }
+  }
+
   const path = await attempt("restore the Codex config", () => uninstallCodexConfig());
-  const serviceRemoved = await attempt("remove the Codex router service", uninstallUserService);
+  if (failures.length > 0) {
+    throw new Error(`PromptRail Codex uninstall was incomplete:\n- ${failures.join("\n- ")}`);
+  }
+
   let pluginRemoved = false;
   let marketplaceRemoved = false;
   if (!process.argv.includes("--skip-plugin-remove")) {
-    pluginRemoved = await attempt("remove the Codex plugin", () => {
-      if (!hasInstalledPlugin()) {
-        return false;
-      }
-      runJson(codexBinary(), [
-        "plugin",
-        "remove",
-        "promptrail-codex-router@promptrail",
-        "--json",
-      ]);
-      return true;
-    });
-    marketplaceRemoved = await attempt("remove the PromptRail marketplace", () => {
-      if (!hasPromptRailMarketplace()) {
-        return false;
-      }
-      runJson(codexBinary(), ["plugin", "marketplace", "remove", "promptrail", "--json"]);
-      return true;
-    });
+    if (pluginInstalled) {
+      pluginRemoved = await attempt("remove the Codex plugin", () => {
+        runJson(codexBinary(), [
+          "plugin",
+          "remove",
+          "promptrail-codex-router@promptrail",
+          "--json",
+        ]);
+        return true;
+      });
+    }
+    if (failures.length > 0) {
+      throw new Error(`PromptRail Codex uninstall was incomplete:\n- ${failures.join("\n- ")}`);
+    }
+    if (marketplaceInstalled) {
+      marketplaceRemoved = await attempt("remove the PromptRail marketplace", () => {
+        runJson(codexBinary(), ["plugin", "marketplace", "remove", "promptrail", "--json"]);
+        return true;
+      });
+    }
   }
+  const serviceRemoved = hadRouterArtifacts || (
+    !process.argv.includes("--switch-if-installed") && !hasCustomRouterScope
+  )
+    ? await attempt("remove the Codex router service", uninstallUserService)
+    : false;
   const configRemoved = await attempt("remove the Codex router credential", () => (
     unlinkIfExists(routerConfigPath())
   ));
   const catalogRemoved = await attempt("remove the Codex model catalog", () => (
     unlinkIfExists(routerModelCatalogPath())
   ));
+  const logRemoved = await attempt("remove the Codex router log", () => (
+    unlinkIfExists(join(routerHome(), "proxy.log"))
+  ));
+  const pidRemoved = await attempt("remove the Codex router process marker", () => (
+    unlinkIfExists(join(routerHome(), "proxy.pid"))
+  ));
   let stateRemoved = false;
   if (failures.length === 0) {
     stateRemoved = await attempt("remove the Codex install state", () => (
       unlinkIfExists(installStatePath())
     ));
+  }
+  if (failures.length === 0) {
+    await attempt("remove the empty Codex router directory", () => removeDirectoryIfEmpty(routerHome()));
   }
 
   if (failures.length > 0) {
@@ -225,6 +334,8 @@ async function uninstall() {
     && !marketplaceRemoved
     && !configRemoved
     && !catalogRemoved
+    && !logRemoved
+    && !pidRemoved
     && !stateRemoved
   ) {
     process.stdout.write("PromptRail Codex router is not installed.\n");

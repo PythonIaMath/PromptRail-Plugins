@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.5.3
+
+### Patch Changes
+
+- 245e2e3: Persist the PromptRail Infinite token in user-only credential files, authenticate Codex and Claude
+  through command helpers, preflight tokens before mode switches, use the hosted Modal gateway by
+  default, and continue through compatible free capacity when subscription credentials are
+  unavailable. Safe uninstall removes only unchanged PromptRail-owned credentials, and implicit
+  `status`/`uninstall` commands cover both Infinite and legacy Plugins installations.
+
+## 1.5.2
+
+### Patch Changes
+
+- Remove capacity labels and provider-plan suffixes from Infinite actor diagnostics and direct-model picker entries while retaining backward-compatible server aliases.
+
+## 1.5.1
+
+### Patch Changes
+
+- Make Infinite the default for bare and implicit-mode CLI commands. The bare command now uses the safe mode-switch path to restore managed Plugins configuration before installing Infinite; Plugins remains available explicitly.
+- Keep custom Codex profiles isolated by reusing legacy Infinite state only when it belongs to the active `config.toml` file.
+
+## 1.5.0
+
+### Minor Changes
+
+- Add an explicitly activated PromptRail Infinite mode for Codex and Claude Code while preserving Plugins as the default installation path.
+- Let users select `promptrail/infinite` or an admitted direct free model from the clients' normal model pickers, backed by the hosted Modal gateway.
+- Keep custom Claude profiles isolated by reusing legacy Infinite state only when it belongs to the active `settings.json` file.
+
+## 1.5.0-infinite-beta.0
+
+### Minor Changes
+
+- Add an explicitly activated PromptRail Infinite beta for Codex and Claude Code while preserving the existing Plugins mode and default installer behavior.
+- Let users select `promptrail/infinite` or an admitted direct free model from the clients' normal model pickers, with hosted Modal configuration and safe switching, status, upgrade, and uninstall flows.
+
 ## 1.4.2
 
 ### Patch Changes

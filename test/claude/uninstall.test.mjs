@@ -205,3 +205,72 @@ test("Claude uninstall retains install state when settings cleanup needs a retry
     await rm(values.directory, { recursive: true, force: true });
   }
 });
+
+test("mode switch treats a clean machine with no Claude CLI as already uninstalled", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-claude-clean-switch-"));
+  try {
+    const serviceManagers = await fakeUserServiceManagers(directory, process.env.PATH);
+    const configDir = join(directory, ".claude");
+    const routerHome = join(directory, "router");
+    const result = spawnSync(
+      process.execPath,
+      [routerBin, "uninstall", "--switch-if-installed"],
+      {
+        env: {
+          ...process.env,
+          HOME: directory,
+          PATH: serviceManagers.path,
+          CLAUDE_BIN: join(directory, "missing-claude"),
+          CLAUDE_CONFIG_DIR: configDir,
+          PROMPTRAIL_CLAUDE_ROUTER_HOME: routerHome,
+          PROMPTRAIL_CLAUDE_ROUTER_CONFIG: join(routerHome, "config.json"),
+        },
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /is not installed/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("mode switch fails closed when Claude registry state cannot be removed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-claude-registry-switch-"));
+  try {
+    const serviceManagers = await fakeUserServiceManagers(directory, process.env.PATH);
+    const configDir = join(directory, ".claude");
+    const pluginDir = join(configDir, "plugins");
+    const routerHome = join(directory, "router");
+    await mkdir(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, "installed_plugins.json"),
+      JSON.stringify({
+        version: 2,
+        plugins: { "promptrail-claude-router@promptrail": [{ scope: "user" }] },
+      }),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [routerBin, "uninstall", "--switch-if-installed"],
+      {
+        env: {
+          ...process.env,
+          HOME: directory,
+          PATH: serviceManagers.path,
+          CLAUDE_BIN: join(directory, "missing-claude"),
+          CLAUDE_CONFIG_DIR: configDir,
+          PROMPTRAIL_CLAUDE_ROUTER_HOME: routerHome,
+          PROMPTRAIL_CLAUDE_ROUTER_CONFIG: join(routerHome, "config.json"),
+        },
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /registry still contains PromptRail/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
