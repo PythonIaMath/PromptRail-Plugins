@@ -1,9 +1,8 @@
 # Privacy
 
 PromptRail Plugins and PromptRail Infinite use different data paths. This disclosure covers the
-open-source client configuration and the private Modal-hosted Infinite beta. It is not a substitute
-for the final public service terms and retention schedule, which must be published before a public
-subscriber beta is enabled.
+open-source client configuration and the Modal-hosted Infinite service. Service terms and the
+retention schedule remain separate contractual documents.
 
 ## Plugins mode
 
@@ -37,7 +36,7 @@ Router configuration is stored under `~/.codex/promptrail-router` or
 `~/.claude/promptrail-router` with user-only permissions. Uninstall removes the local router
 credential and PromptRail-owned client settings while preserving unrelated configuration changes.
 
-## Infinite hosted beta
+## Infinite hosted mode
 
 Infinite sends the request through the PromptRail gateway because PromptRail performs provider
 execution server-side. The request can include system instructions, messages, tool definitions,
@@ -53,15 +52,17 @@ The gateway records sanitized execution receipts containing the route and tenant
 catalog versions; selected and executed internal model IDs; capacity class; whether premium or
 degraded free-only capacity was used; hashed connection IDs; attempt results and latency; token
 counts; estimated cost; and decision, pre-dispatch, and total latency. Receipts do not contain raw
-request or response content. During the private beta these receipts can appear in the operator's
-private Modal logs; production retention and deletion periods are not yet promised.
+request or response content. These receipts can appear in PromptRail's private Modal operational
+logs; contractual retention and deletion periods are documented separately from this package.
 
-The private beta stores the user's OpenRouter key and Codex OAuth bundle in that user's own Modal
-workspace secrets. Clients receive only a PromptRail gateway key. The public installer never writes
-that key into a project, Codex configuration, or Claude settings. Codex reads
-`PROMPTRAIL_API_KEY` directly. Claude Code uses a user-only executable helper that reads the same
-environment variable and prints it only to Claude Code's credential subprocess. Modified helpers
-are preserved during uninstall.
+Provider API credentials and supported subscription credentials stay in PromptRail's private Modal
+secrets or encrypted control-plane storage and are never returned to the client. Clients receive
+only a PromptRail token. During installation the token is accepted through a hidden prompt,
+`--token`, or a process environment variable, then stored separately for each selected client in a
+mode-0600 user-only file. A mode-0700 helper reads that file and prints the token only to the
+client's credential subprocess. The raw token is never written to a project, Codex configuration,
+Claude settings, or install state. Safe uninstall deletes unchanged PromptRail-owned token/helper
+files and preserves any user-modified artifact instead of deleting it.
 
 By default, the client-facing response exposes `promptrail/infinite`, route ID, policy/catalog
 versions, premium-use status, degraded-mode status, and pre-dispatch timing. The separately

@@ -4,10 +4,18 @@ import test from "node:test";
 import {
   DEFAULT_GRADER_URLS,
   DEFAULT_MARKETPLACE_SOURCE,
+  configuredInfiniteToken,
   configuredToken,
   parseCliArgs,
-  runCli,
+  runCli as runCliWithPreflight,
 } from "../lib/installer-cli.mjs";
+
+async function runCli(options) {
+  return runCliWithPreflight({
+    ...options,
+    preflightInfinite: options.preflightInfinite || (async () => []),
+  });
+}
 
 function outputBuffer() {
   let value = "";
@@ -65,6 +73,12 @@ test("parses explicit Infinite installs and safe mode switches", () => {
     target: "codex",
     options: {},
   });
+  assert.deepEqual(parseCliArgs(["switch", "infinite", "--token", "secret"]), {
+    command: "switch",
+    mode: "infinite",
+    target: "both",
+    options: { token: "secret" },
+  });
   assert.throws(() => parseCliArgs(["switch", "both"]), /Switch requires a mode/);
 });
 
@@ -83,6 +97,17 @@ test("prefers the dedicated access-token environment variable", () => {
     "access-token",
   );
   assert.equal(configuredToken({}, { PROMPTRAIL_API_KEY: "infinite-only" }), "");
+  assert.equal(
+    configuredInfiniteToken({}, {
+      PROMPTRAIL_API_KEY: "infinite-token",
+      PROMPTRAIL_ACCESS_TOKEN: "fallback-token",
+    }),
+    "infinite-token",
+  );
+  assert.equal(
+    configuredInfiniteToken({}, { PROMPTRAIL_ACCESS_TOKEN: "shared-token" }),
+    "shared-token",
+  );
 });
 
 test("passes secrets through child environment, never command arguments", async () => {
@@ -172,7 +197,7 @@ test("installs both client routers with one shared token", async () => {
   assert.equal(calls[1].options.env.PROMPTRAIL_GRADER_URL, DEFAULT_GRADER_URLS.claude);
 });
 
-test("installs Infinite without passing its API key to child commands or local proxies", async () => {
+test("installs Infinite with its API key only in child environments", async () => {
   const calls = [];
   const output = outputBuffer();
   const status = await runCli({
@@ -201,8 +226,60 @@ test("installs Infinite without passing its API key to child commands or local p
     assert.equal(call.options.env.PROMPTRAIL_ROUTER_TOKEN, undefined);
     assert.equal(call.options.env.PROMPTRAIL_ACCESS_TOKEN, undefined);
     assert.equal(call.options.env.PROMPTRAIL_GRADER_URL, undefined);
+    assert.equal(call.options.env.PROMPTRAIL_API_KEY, "infinite-secret");
     assert.doesNotMatch(call.args.join(" "), /infinite-secret/);
   }
+});
+
+test("preflights Infinite authentication before changing either client", async () => {
+  let spawned = false;
+  let preflight;
+  const output = outputBuffer();
+  const status = await runCli({
+    argv: ["switch", "infinite", "--token", "one-time-secret"],
+    env: { PROMPTRAIL_INFINITE_BASE_URL: "https://gateway.example/v1" },
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    async preflightInfinite(options) {
+      preflight = options;
+      return [];
+    },
+    spawn() {
+      spawned = true;
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.equal(spawned, true);
+  assert.deepEqual(preflight, {
+    baseUrl: "https://gateway.example/v1",
+    apiKey: "one-time-secret",
+  });
+});
+
+test("an invalid Infinite token cannot uninstall the current mode", async () => {
+  let spawned = false;
+  const output = outputBuffer();
+  await assert.rejects(
+    () => runCliWithPreflight({
+      argv: ["switch", "infinite"],
+      env: { PROMPTRAIL_API_KEY: "invalid-token" },
+      input: {},
+      output: output.stream,
+      errorOutput: output.stream,
+      async preflightInfinite() {
+        throw new Error("PromptRail Infinite model discovery failed with HTTP 401.");
+      },
+      spawn() {
+        spawned = true;
+        return { status: 0 };
+      },
+    }),
+    /HTTP 401/,
+  );
+  assert.equal(spawned, false);
 });
 
 test("switches by uninstalling the previous mode before installing the selected mode", async () => {
@@ -210,7 +287,7 @@ test("switches by uninstalling the previous mode before installing the selected 
   const output = outputBuffer();
   const status = await runCli({
     argv: ["switch", "infinite"],
-    env: {},
+    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
     input: {},
     output: output.stream,
     errorOutput: output.stream,
@@ -235,7 +312,7 @@ test("the bare command safely migrates Plugins to Infinite", async () => {
   const output = outputBuffer();
   const status = await runCli({
     argv: [],
-    env: {},
+    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
     input: {},
     output: output.stream,
     errorOutput: output.stream,
@@ -262,7 +339,7 @@ test("the bare migration never installs Infinite after Plugins cleanup fails", a
   const output = outputBuffer();
   const status = await runCli({
     argv: [],
-    env: {},
+    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
     input: {},
     output: output.stream,
     errorOutput: output.stream,
@@ -283,7 +360,7 @@ test("switches only the explicitly requested client", async () => {
   const output = outputBuffer();
   const status = await runCli({
     argv: ["switch", "infinite", "codex"],
-    env: {},
+    env: { PROMPTRAIL_API_KEY: "infinite-secret" },
     input: {},
     output: output.stream,
     errorOutput: output.stream,

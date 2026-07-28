@@ -3,6 +3,7 @@
 import { unlink } from "node:fs/promises";
 
 import {
+  infiniteClaudeBaseUrl,
   infiniteClaudeStatus,
   infiniteInstallStatePath,
   installInfiniteClaudeSettings,
@@ -23,9 +24,12 @@ async function unlinkIfExists(path) {
 async function main() {
   const command = process.argv[2];
   if (command === "install") {
-    const installed = await installInfiniteClaudeSettings();
+    const apiKey = String(process.env.PROMPTRAIL_API_KEY || "").trim();
+    const baseUrl = infiniteClaudeBaseUrl();
+    const installed = await installInfiniteClaudeSettings({ baseUrl, apiKey });
     process.stdout.write(
-      `PromptRail Infinite Claude configuration installed: ${installed.path}\nSet PROMPTRAIL_API_KEY in your user environment before using it; Claude reads it through the user-only key helper at ${installed.helperPath}.\n`,
+      `PromptRail Infinite Claude configuration installed: ${installed.path}\n`
+      + `The PromptRail token is stored in a user-only file and read through ${installed.helperPath}.\n`,
     );
     return;
   }

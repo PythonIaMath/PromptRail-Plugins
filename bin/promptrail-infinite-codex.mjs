@@ -4,7 +4,6 @@ import { unlink } from "node:fs/promises";
 
 import {
   buildInfiniteModelCatalog,
-  INFINITE_MODEL_CATALOG,
   infiniteBaseUrl,
   infiniteInstallStatePath,
   infiniteCodexStatus,
@@ -28,27 +27,24 @@ async function main() {
   const command = process.argv[2];
   if (command === "install") {
     const apiKey = String(process.env.PROMPTRAIL_API_KEY || "").trim();
-    let modelCatalog = INFINITE_MODEL_CATALOG;
-    if (apiKey) {
-      const records = await fetchInfiniteModelRecords({
-        baseUrl: infiniteBaseUrl(),
-        apiKey,
-      });
-      modelCatalog = buildInfiniteModelCatalog(records);
-    }
+    const records = await fetchInfiniteModelRecords({
+      baseUrl: infiniteBaseUrl(),
+      apiKey,
+    });
+    const modelCatalog = buildInfiniteModelCatalog(records);
     const installed = await installInfiniteCodexConfig(
       undefined,
       undefined,
       undefined,
       undefined,
       modelCatalog,
+      apiKey,
     );
     const directModels = Math.max(modelCatalog.models.length - 1, 0);
     process.stdout.write(
       `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
-      + (apiKey
-        ? `${directModels} direct model${directModels === 1 ? "" : "s"} added to /model. Restart Codex to reload the catalog.\n`
-        : "Set PROMPTRAIL_API_KEY, then run the Infinite install again to add direct models to /model.\n"),
+      + `${directModels} direct model${directModels === 1 ? "" : "s"} added to /model. `
+      + `The PromptRail token is stored in a user-only file. Restart Codex to reload the catalog.\n`,
     );
     return;
   }

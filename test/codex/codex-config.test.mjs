@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import test from "node:test";
@@ -8,8 +9,9 @@ import { join } from "node:path";
 import {
   buildInfiniteModelCatalog,
   codexConfigPath,
+  DEFAULT_INFINITE_BASE_URL,
   installCodexConfig,
-  installInfiniteCodexConfig,
+  installInfiniteCodexConfig as installInfiniteCodexConfigWithToken,
   infiniteCodexStatus,
   infiniteBaseUrl,
   infiniteInstallStatePath,
@@ -24,8 +26,22 @@ import {
   uninstallInfiniteCodexConfig,
   unpatchCodexConfig,
   unpatchInfiniteCodexConfig,
-  upgradeInstalledInfiniteCodexConfig,
+  upgradeInstalledInfiniteCodexConfig as upgradeInstalledInfiniteCodexConfigWithToken,
 } from "../../lib/codex-config.mjs";
+
+const TEST_INFINITE_TOKEN = "pr_test_infinite_token";
+
+async function installInfiniteCodexConfig(...args) {
+  args[5] ??= TEST_INFINITE_TOKEN;
+  return installInfiniteCodexConfigWithToken(...args);
+}
+
+async function upgradeInstalledInfiniteCodexConfig(options = {}) {
+  return upgradeInstalledInfiniteCodexConfigWithToken({
+    ...options,
+    apiKey: options.apiKey || TEST_INFINITE_TOKEN,
+  });
+}
 import {
   routerConfigPath,
   routerHome,
@@ -184,8 +200,10 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.match(patched, /^model_provider = "promptrail-infinite"/m);
   assert.match(patched, /^model = "promptrail\/infinite"/m);
   assert.match(patched, /\[model_providers\.promptrail-infinite\]/);
-  assert.match(patched, /base_url = "https:\/\/api\.promptrail\.ai\/v1"/);
-  assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
+  assert.ok(patched.includes(`base_url = ${JSON.stringify(DEFAULT_INFINITE_BASE_URL)}`));
+  assert.doesNotMatch(patched, /env_key\s*=/);
+  assert.match(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
+  assert.match(patched, /command = ".*api-key-helper\.sh"/);
   assert.match(patched, /requires_openai_auth = false/);
   assert.match(patched, /wire_api = "responses"/);
   assert.match(
@@ -337,6 +355,8 @@ test("restores the original config when Infinite is uninstalled", async () => {
   const configPath = join(directory, "config.toml");
   const statePath = join(directory, "install-state.json");
   const catalogPath = join(directory, "models.json");
+  const tokenPath = join(directory, "api-token");
+  const helperPath = join(directory, "api-key-helper.sh");
   const original = 'model_provider = "openai"\n';
   await writeFile(configPath, original);
   try {
@@ -346,9 +366,23 @@ test("restores the original config when Infinite is uninstalled", async () => {
     assert.equal(catalog.models[0].context_window, 128_000);
     assert.deepEqual(catalog.models[0].input_modalities, ["text"]);
     assert.equal((await stat(catalogPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(tokenPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(helperPath)).mode & 0o777, 0o700);
+    assert.equal(await readFile(tokenPath, "utf8"), `${TEST_INFINITE_TOKEN}\n`);
+    const helperResult = spawnSync(helperPath, [], {
+      encoding: "utf8",
+      env: { ...process.env, PROMPTRAIL_API_KEY: "wrong-environment-key" },
+    });
+    assert.equal(helperResult.status, 0, helperResult.stderr);
+    assert.equal(helperResult.stdout, `${TEST_INFINITE_TOKEN}\n`);
+    for (const publicArtifact of [configPath, statePath, helperPath]) {
+      assert.doesNotMatch(await readFile(publicArtifact, "utf8"), new RegExp(TEST_INFINITE_TOKEN));
+    }
     await uninstallInfiniteCodexConfig(statePath);
     assert.equal(await readFile(configPath, "utf8"), original);
     await assert.rejects(() => readFile(catalogPath, "utf8"), { code: "ENOENT" });
+    await assert.rejects(() => readFile(tokenPath, "utf8"), { code: "ENOENT" });
+    await assert.rejects(() => readFile(helperPath, "utf8"), { code: "ENOENT" });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -575,6 +609,25 @@ test("Infinite Codex status verifies the managed config and catalog", async () =
     assert.deepEqual(
       await infiniteCodexStatus(statePath),
       { configured: false, reason: "catalog_modified", statePath },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Infinite Codex status rejects an exposed token file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "promptrail-infinite-token-mode-"));
+  const configPath = join(directory, "config.toml");
+  const statePath = join(directory, "install-state.json");
+  const catalogPath = join(directory, "models.json");
+  const tokenPath = join(directory, "api-token");
+  await writeFile(configPath, "");
+  try {
+    await installInfiniteCodexConfig(configPath, statePath, undefined, catalogPath);
+    await chmod(tokenPath, 0o644);
+    assert.deepEqual(
+      await infiniteCodexStatus(statePath),
+      { configured: false, reason: "token_modified", statePath },
     );
   } finally {
     await rm(directory, { recursive: true, force: true });
