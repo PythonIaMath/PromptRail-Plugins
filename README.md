@@ -20,7 +20,8 @@ explicit `install plugins` and `switch plugins` commands.
 `infinite` is the separately activated PromptRail provider mode. Its routing gateway and provider
 execution run in Modal, while Codex or Claude Code continue to own local tools, files, shell access,
 permissions, and conversation state. It keeps `promptrail/infinite` as the default automatic model
-and adds tenant-authorized direct model aliases to the client model picker. It never starts the
+and keeps provider-specific free actors inside the router rather than exposing them in the client
+model picker. Connected OpenAI subscription models remain explicit Codex choices. It never starts the
 existing Plugins proxy and never writes the PromptRail token to a project or client configuration.
 It is the default mode for new installs. Running the bare package command safely switches existing
 managed Plugins installations to Infinite before installing the hosted configuration.
@@ -117,24 +118,24 @@ calls. These display-only protocol items are removed before the next provider re
 no diagnostic label, capacity class, credential ID, reserve level, or internal fallback plan.
 Plugins mode does not send this header.
 
-### Selecting a free model directly
+### Choosing a model
 
 After Infinite is installed, enter `/model` in Codex or Claude Code. The picker contains:
 
 - `PromptRail Infinite · automatic`, which keeps automatic semantic routing and protected
   subscription continuity;
-- one `provider · model` entry for each currently healthy, zero-cost, tool-capable actor
-  admitted for that tenant.
+- the normal OpenAI subscription models connected to that tenant in Codex.
 
 Codex reads a user-only catalog downloaded during `install infinite`; rerun the same install command
 and restart Codex after the hosted catalog changes. Claude Code enables native gateway model
 discovery and reads the current list when its picker refreshes.
 
-A direct choice is intentionally strict. PromptRail may retry another credential for the exact
-same provider/model, but it cannot substitute another semantic model and cannot use the user's
-subscription. If that actor is down, out of quota, or incompatible with the current request's tools,
-context, modality, reasoning, or output limit, the call returns a clear error. Select
-`PromptRail Infinite · automatic` again when continuity is more important than pinning one actor.
+Provider-specific free models are intentionally not selectable or listed. Infinite evaluates them
+on every LLM call and may reroute the next call independently as the prompt and operational state
+change. Choosing a named OpenAI model is an explicit request to use that exact subscription model;
+PromptRail may retry another credential for the same model but cannot silently substitute a free or
+different subscription model. Select `PromptRail Infinite · automatic` again for free-first routing
+and subscription continuity.
 
 ### Modal-hosted Infinite service
 

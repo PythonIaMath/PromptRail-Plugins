@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Patch Changes
+
+- Keep free-provider actors internal to Infinite routing. The Codex `/model` picker now exposes
+  PromptRail Infinite plus connected OpenAI subscription models, without provider-specific free
+  aliases.
+
 ## 1.5.4
 
 ### Patch Changes

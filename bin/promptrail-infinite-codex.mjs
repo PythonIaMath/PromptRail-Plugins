@@ -40,10 +40,10 @@ async function main() {
       modelCatalog,
       apiKey,
     );
-    const directModels = Math.max(modelCatalog.models.length - 1, 0);
+    const subscriptionModels = Math.max(modelCatalog.models.length - 1, 0);
     process.stdout.write(
       `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
-      + `${directModels} direct model${directModels === 1 ? "" : "s"} added to /model. `
+      + `${subscriptionModels} OpenAI subscription model${subscriptionModels === 1 ? "" : "s"} added to /model. `
       + `The PromptRail token is stored in a user-only file. Restart Codex to reload the catalog.\n`,
     );
     return;
