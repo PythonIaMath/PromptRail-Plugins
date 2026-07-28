@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.2
+
+### Patch Changes
+
+- Remove capacity labels and provider-plan suffixes from Infinite actor diagnostics and direct-model picker entries while retaining backward-compatible server aliases.
+
 ## 1.5.1
 
 ### Patch Changes
