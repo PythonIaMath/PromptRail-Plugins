@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.4
+
+### Patch Changes
+
+- Align the npm package, lockfile, and release-tag metadata so stable releases are validated and
+  published reproducibly by the protected GitHub Actions workflow.
+
 ## 1.5.3
 
 ### Patch Changes
