@@ -100,10 +100,11 @@ The explicit Infinite configuration also sends
 `X-PromptRail-Diagnostics: executed-model`. The default requested model remains
 `promptrail/infinite`, so Codex's model selector and footer keep showing that stable virtual model.
 For every completed Codex LLM call, the transcript adds a dim line such as
-`Executed by openrouter/cohere/north-mini-code` or `... · subscription reserve` before
-the actor's output. Tool-result continuations get their own line because they are separate model
+`openrouter/cohere/north-mini-code` immediately before the call completes. Tool-result continuations
+get their own line because they are separate model
 calls. These display-only protocol items are removed before the next provider request. This exposes
-no credential ID, reserve level, or internal fallback plan. Plugins mode does not send this header.
+no diagnostic label, capacity class, credential ID, reserve level, or internal fallback plan.
+Plugins mode does not send this header.
 
 ### Selecting a free model directly
 
