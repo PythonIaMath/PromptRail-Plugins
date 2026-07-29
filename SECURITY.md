@@ -13,6 +13,10 @@ include reproduction steps, affected versions, and impact.
 - Local proxies bind to `127.0.0.1` only.
 - Provider API-key traffic is rejected by subscription-only routes.
 - PromptRail endpoints require a separate PromptRail access token.
+- Interactive Infinite installation requires a signed-in PromptRail account, an active Infinite
+  entitlement, and explicit approval of a short-lived device authorization.
+- Device grants and install grants expire and are single-use. The resulting Infinite machine key is
+  scoped and revocable, and PromptRail stores only its hash.
 - Provider bearer tokens are forwarded only to the fixed provider upstream.
 - Unsupported proxy paths are rejected.
 - Redirects are not followed automatically.
@@ -22,5 +26,5 @@ include reproduction steps, affected versions, and impact.
 
 ## User responsibility
 
-Treat the PromptRail access token as a secret. Do not commit it, paste it into issue reports, or
-share router configuration files.
+Treat PromptRail access tokens and Infinite machine keys as secrets. Do not commit them, paste them
+into issue reports, or share router configuration or credential files.
