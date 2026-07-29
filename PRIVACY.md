@@ -57,12 +57,18 @@ logs; contractual retention and deletion periods are documented separately from 
 
 Provider API credentials and supported subscription credentials stay in PromptRail's private Modal
 secrets or encrypted control-plane storage and are never returned to the client. Clients receive
-only a PromptRail token. During installation the token is accepted through a hidden prompt,
-`--token`, or a process environment variable, then stored separately for each selected client in a
-mode-0600 user-only file. A mode-0700 helper reads that file and prints the token only to the
-client's credential subprocess. The raw token is never written to a project, Codex configuration,
-Claude settings, or install state. Safe uninstall deletes unchanged PromptRail-owned token/helper
-files and preserves any user-modified artifact instead of deleting it.
+only a PromptRail machine credential. During a normal Infinite installation, the CLI starts a
+short-lived device authorization and opens a same-origin PromptRail approval page. The signed-in
+user must have an active Infinite entitlement and explicitly approve the device. A one-use install
+grant is then exchanged for a revocable, Infinite-scoped API key. The control plane stores only the
+key hash, and the plaintext key is returned to the CLI once.
+
+The installer stores that key separately for each selected client in a mode-0600 user-only file. A
+mode-0700 helper reads the file and prints the key only to the client's credential subprocess. The
+raw key is never written to a project, Codex configuration, Claude settings, or install state.
+`--token` and process-environment installation remain available only as explicit automation or
+recovery overrides. Safe uninstall deletes unchanged PromptRail-owned credential/helper files and
+preserves any user-modified artifact instead of deleting it.
 
 By default, the client-facing response exposes `promptrail/infinite`, route ID, policy/catalog
 versions, premium-use status, degraded-mode status, and pre-dispatch timing. The separately
