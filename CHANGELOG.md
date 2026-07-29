@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.5.5
+
 ### Patch Changes
 
 - Add account-based browser authorization for Infinite installs. The CLI now opens a one-time
