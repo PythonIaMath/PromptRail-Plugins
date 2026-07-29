@@ -83,6 +83,44 @@ class CoLocatedCoreTest(unittest.TestCase):
         self.assertIn('"gpu": "2xL4"', source)
         self.assertNotIn("LiquidAI/LFM2", source)
 
+    def test_production_router_keeps_one_ready_burst_replica_per_gpu_stage(self) -> None:
+        tree = ast.parse((ROOT / "co_located_modal_app.py").read_text())
+        production_classes = {"GemmaModelSelector", "CoLocatedRouterV7"}
+        found: dict[str, dict[str, ast.expr]] = {}
+
+        for node in tree.body:
+            if not isinstance(node, ast.ClassDef) or node.name not in production_classes:
+                continue
+            app_cls = next(
+                (
+                    decorator
+                    for decorator in node.decorator_list
+                    if isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Attribute)
+                    and decorator.func.attr == "cls"
+                ),
+                None,
+            )
+            self.assertIsNotNone(app_cls)
+            found[node.name] = {
+                keyword.arg: keyword.value
+                for keyword in app_cls.keywords
+                if keyword.arg in {"min_containers", "buffer_containers"}
+            }
+
+        self.assertEqual(set(found), production_classes)
+        for class_name, capacity in found.items():
+            self.assertEqual(
+                set(capacity),
+                {"min_containers", "buffer_containers"},
+                class_name,
+            )
+            self.assertEqual(ast.unparse(capacity["min_containers"]), "KEEP_WARM_CONTAINERS")
+            self.assertEqual(
+                ast.unparse(capacity["buffer_containers"]),
+                "READY_BURST_CONTAINERS",
+            )
+
     def test_model_classifier_prompt_encodes_model_family_strengths_and_context(self) -> None:
         messages = co_located_core.model_classifier_messages(
             "Implement the approved parser design.",

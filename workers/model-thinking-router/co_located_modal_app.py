@@ -38,6 +38,9 @@ from router_core import (
 APP_NAME = "CodexAndClaudePlugin"
 ROUTER_REVISION = "ood-winner-v6-hybrid"
 KEEP_WARM_CONTAINERS = 0 if os.getenv("PROMPTRAIL_OPTIMIZER_DEPLOYMENT") == "1" else 1
+READY_BURST_CONTAINERS = (
+    0 if os.getenv("PROMPTRAIL_OPTIMIZER_DEPLOYMENT") == "1" else 1
+)
 GEMMA_MODEL_ID = "RedHatAI/gemma-3-12b-it-quantized.w4a16"
 GEMMA_MODEL_REVISION = "700b3cfd55276c9e404d97680ddd29e4fa18e9f5"
 GEMMA_BASE_MODEL_ID = "google/gemma-3-12b-it"
@@ -154,6 +157,7 @@ def download_gemma_model() -> str:
     gpu="L4",
     volumes={"/models/gemma-cache": gemma_model_volume},
     min_containers=KEEP_WARM_CONTAINERS,
+    buffer_containers=READY_BURST_CONTAINERS,
     scaledown_window=600,
     timeout=10 * 60,
 )
@@ -323,6 +327,7 @@ def evaluate_routing(endpoint_url: str, execution: str = "parallel") -> str:
     volumes={"/models/arch-cache": arch_model_volume},
     secrets=[router_secret, mongodb_secret],
     min_containers=KEEP_WARM_CONTAINERS,
+    buffer_containers=READY_BURST_CONTAINERS,
     scaledown_window=600,
     timeout=15 * 60,
 )
