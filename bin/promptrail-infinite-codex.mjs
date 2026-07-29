@@ -13,6 +13,10 @@ import {
 } from "../lib/codex-config.mjs";
 import { fetchInfiniteModelRecords } from "../lib/infinite-model-discovery.mjs";
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", `'"'"'`)}'`;
+}
+
 async function unlinkIfExists(path) {
   try {
     await unlink(path);
@@ -40,11 +44,12 @@ async function main() {
       modelCatalog,
       apiKey,
     );
-    const directModels = Math.max(modelCatalog.models.length - 1, 0);
+    const subscriptionModels = Math.max(modelCatalog.models.length - 1, 0);
     process.stdout.write(
       `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
-      + `${directModels} direct model${directModels === 1 ? "" : "s"} added to /model. `
-      + `The PromptRail token is stored in a user-only file. Restart Codex to reload the catalog.\n`,
+      + `${subscriptionModels} OpenAI subscription model${subscriptionModels === 1 ? "" : "s"} added to /model. `
+      + `The PromptRail token is stored in a user-only file. Restart Codex to reload the catalog.\n`
+      + `Start Infinite Codex with:\n  ${shellQuote(installed.helperPath)} codex\n`,
     );
     return;
   }

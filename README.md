@@ -20,7 +20,8 @@ explicit `install plugins` and `switch plugins` commands.
 `infinite` is the separately activated PromptRail provider mode. Its routing gateway and provider
 execution run in Modal, while Codex or Claude Code continue to own local tools, files, shell access,
 permissions, and conversation state. It keeps `promptrail/infinite` as the default automatic model
-and adds tenant-authorized direct model aliases to the client model picker. It never starts the
+and keeps provider-specific free actors inside the router rather than exposing them in the client
+model picker. Connected OpenAI subscription models remain explicit Codex choices. It never starts the
 existing Plugins proxy and never writes the PromptRail token to a project or client configuration.
 It is the default mode for new installs. Running the bare package command safely switches existing
 managed Plugins installations to Infinite before installing the hosted configuration.
@@ -46,19 +47,28 @@ npx --yes @promptrail/plugins@latest
 Do not use `npm i @promptrail/plugins` as the setup command: it only downloads the package and does
 not run PromptRail's safe configuration migration. Use the `npx` command above.
 
-The installer asks for the PromptRail token without echoing it. The bare command is equivalent to
-`npx --yes @promptrail/plugins@latest switch infinite both`: it validates the token before changing
-either client, restores the package-managed Plugins configuration, preserves unrelated user
-settings, then installs Infinite. For non-interactive installation, pass the token in the process
-environment:
+Create a PromptRail account and activate its Infinite subscription first. The installer then starts
+a short-lived device authorization, opens the PromptRail approval page in the default browser, and
+waits for the signed-in account to approve that machine. If the browser cannot be opened, the CLI
+prints the same HTTPS URL and one-time device code for manual use.
+
+The bare command is equivalent to
+`npx --yes @promptrail/plugins@latest switch infinite both`: it obtains a machine credential before
+changing either client, restores the package-managed Plugins configuration, preserves unrelated
+user settings, then installs Infinite. Browser approval is the normal interactive path. For CI,
+recovery, or another non-interactive installation, an existing Infinite API key remains an explicit
+override:
 
 ```bash
 PROMPTRAIL_API_KEY="..." npx --yes @promptrail/plugins@latest
 ```
 
-The installer stores the token only in a user-private mode-0600 file under the selected client
-profile. Codex and Claude read it through a mode-0700 command helper. Neither the token nor provider
-credentials are written to a repository, `config.toml`, `settings.json`, or install state.
+The browser flow returns a revocable, Infinite-scoped API key exactly once. The installer stores it
+only in a user-private mode-0600 file under the selected client profile; the web control plane stores
+only its hash. Claude reads it through a mode-0700 command helper. Codex 0.145 uses its documented
+`PROMPTRAIL_API_KEY` provider environment variable, so the installer prints an exact launcher
+command that reads the same private token file without exposing the token. Neither the token nor
+provider credentials are written to a repository, `config.toml`, `settings.json`, or install state.
 
 To install the local Plugins mode instead, select it explicitly. The installer asks for its token
 without echoing it:
@@ -96,8 +106,8 @@ npx --yes @promptrail/plugins@latest install infinite both
 ```
 
 This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
-Code with the PromptRail base URL and model. The key authenticates model discovery during install
-and normal inference afterward through the private token file and helper described above.
+Code with the PromptRail base URL and model. Browser authorization issues the key that authenticates model discovery during install
+and normal inference afterward through the private token file and launcher/helper described above.
 Installation refuses unrelated Anthropic credential
 variables, key helpers, models, or gateways instead of overriding them. Switching modes is explicit
 and first restores the other mode's managed settings:
@@ -117,24 +127,24 @@ calls. These display-only protocol items are removed before the next provider re
 no diagnostic label, capacity class, credential ID, reserve level, or internal fallback plan.
 Plugins mode does not send this header.
 
-### Selecting a free model directly
+### Choosing a model
 
 After Infinite is installed, enter `/model` in Codex or Claude Code. The picker contains:
 
 - `PromptRail Infinite · automatic`, which keeps automatic semantic routing and protected
   subscription continuity;
-- one `provider · model` entry for each currently healthy, zero-cost, tool-capable actor
-  admitted for that tenant.
+- the normal OpenAI subscription models connected to that tenant in Codex.
 
 Codex reads a user-only catalog downloaded during `install infinite`; rerun the same install command
 and restart Codex after the hosted catalog changes. Claude Code enables native gateway model
 discovery and reads the current list when its picker refreshes.
 
-A direct choice is intentionally strict. PromptRail may retry another credential for the exact
-same provider/model, but it cannot substitute another semantic model and cannot use the user's
-subscription. If that actor is down, out of quota, or incompatible with the current request's tools,
-context, modality, reasoning, or output limit, the call returns a clear error. Select
-`PromptRail Infinite · automatic` again when continuity is more important than pinning one actor.
+Provider-specific free models are intentionally not selectable or listed. Infinite evaluates them
+on every LLM call and may reroute the next call independently as the prompt and operational state
+change. Choosing a named OpenAI model is an explicit request to use that exact subscription model;
+PromptRail may retry another credential for the same model but cannot silently substitute a free or
+different subscription model. Select `PromptRail Infinite · automatic` again for free-first routing
+and subscription continuity.
 
 ### Modal-hosted Infinite service
 
@@ -174,10 +184,14 @@ You need:
 
 - Node.js 18.19 or newer.
 - A current Codex or Claude Code installation.
-- A PromptRail Infinite access token. Request access at
-  [support@promptrail.ai](mailto:support@promptrail.ai).
+- A verified PromptRail account with an active Infinite subscription. Create the account and
+  complete Stripe checkout on [promptrail.ai](https://www.promptrail.ai/) before running the CLI.
+- A browser on any device that can open the one-time authorization URL. Automatic browser launch is
+  convenient but not required.
 
-Never commit your PromptRail access token to a repository or shell script.
+The CLI never asks for a Stripe secret or provider credential. Never commit a PromptRail API key to
+a repository or shell script; environment-token installation is intended only for automation and
+recovery.
 
 ## Codex
 

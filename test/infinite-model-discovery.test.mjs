@@ -27,6 +27,7 @@ test("downloads the tenant model catalog without placing its key in the URL", as
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://gateway.example/v1/models");
   assert.equal(calls[0].options.headers.Authorization, "Bearer secret-key");
+  assert.equal(calls[0].options.headers["X-PromptRail-Model-Catalog"], "picker-v2");
   assert.equal(calls[0].options.redirect, "error");
   assert.doesNotMatch(calls[0].url, /secret-key/);
   assert.equal(records[0].id, "promptrail/infinite");

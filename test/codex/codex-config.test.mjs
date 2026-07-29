@@ -201,9 +201,8 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.match(patched, /^model = "promptrail\/infinite"/m);
   assert.match(patched, /\[model_providers\.promptrail-infinite\]/);
   assert.ok(patched.includes(`base_url = ${JSON.stringify(DEFAULT_INFINITE_BASE_URL)}`));
-  assert.doesNotMatch(patched, /env_key\s*=/);
-  assert.match(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
-  assert.match(patched, /command = ".*api-key-helper\.sh"/);
+  assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
+  assert.doesNotMatch(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
   assert.match(patched, /requires_openai_auth = false/);
   assert.match(patched, /wire_api = "responses"/);
   assert.match(
@@ -214,7 +213,7 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.doesNotMatch(patched, /127\.0\.0\.1/);
 });
 
-test("builds strict picker entries for tenant-authorized direct models", () => {
+test("hides free actors and builds strict picker entries for connected OpenAI models", () => {
   const catalog = buildInfiniteModelCatalog([
     {
       id: "promptrail/infinite",
@@ -235,40 +234,56 @@ test("builds strict picker entries for tenant-authorized direct models", () => {
         streaming: true,
       },
     },
+    {
+      id: "gpt-5.6-sol",
+      object: "model",
+      owned_by: "openai",
+      routing_mode: "subscription-direct-v1",
+      display_name: "GPT-5.6 Sol",
+      description: "Use this model through your connected OpenAI subscription.",
+      context_window: 128_000,
+      max_output_tokens: 32_768,
+      capabilities: {
+        tool_calling: true,
+        vision: true,
+        reasoning: true,
+        streaming: true,
+      },
+    },
   ]);
 
   assert.equal(catalog.models.length, 2);
-  const direct = catalog.models[1];
-  assert.equal(direct.slug, "promptrail/direct-openrouter-cohere--north-mini-code");
-  assert.equal(direct.slug.split("/").length, 2);
-  assert.equal(direct.display_name, "openrouter · cohere/north-mini-code");
-  assert.doesNotMatch(`${direct.slug} ${direct.display_name} ${direct.description}`, /free/i);
-  assert.equal(direct.context_window, 64_000);
-  assert.equal(direct.max_context_window, 64_000);
-  assert.deepEqual(direct.input_modalities, ["text"]);
-  assert.equal(direct.visibility, "list");
-  assert.equal(direct.supported_in_api, true);
-  assert.equal(direct.priority, 1);
+  const subscription = catalog.models[1];
+  assert.equal(subscription.slug, "gpt-5.6-sol");
+  assert.equal(subscription.display_name, "GPT-5.6 Sol");
+  assert.doesNotMatch(JSON.stringify(catalog), /promptrail\/direct-|openrouter|north-mini/i);
+  assert.equal(subscription.context_window, 128_000);
+  assert.equal(subscription.max_context_window, 128_000);
+  assert.deepEqual(subscription.input_modalities, ["text", "image"]);
+  assert.equal(subscription.visibility, "list");
+  assert.equal(subscription.supported_in_api, true);
+  assert.equal(subscription.priority, 1);
 });
 
-test("rejects untrusted direct model records before writing the Codex catalog", () => {
+test("rejects untrusted subscription model records before writing the Codex catalog", () => {
   const base = {
     object: "model",
-    routing_mode: "direct-free-v1",
-    display_name: "Direct model",
-    description: "Direct actor.",
+    owned_by: "openai",
+    routing_mode: "subscription-direct-v1",
+    display_name: "GPT model",
+    description: "Connected OpenAI subscription model.",
     context_window: 64_000,
     max_output_tokens: 8_192,
     capabilities: { tool_calling: true, streaming: true },
   };
   assert.throws(
-    () => buildInfiniteModelCatalog([{ ...base, id: "promptrail/direct/provider/model" }]),
-    /direct model id is invalid/,
+    () => buildInfiniteModelCatalog([{ ...base, id: "provider/gpt-5.6-sol" }]),
+    /subscription model id is invalid/,
   );
   assert.throws(
     () => buildInfiniteModelCatalog([{
       ...base,
-      id: "promptrail/direct-text-only",
+      id: "gpt-text-only",
       capabilities: { tool_calling: false, streaming: true },
     }]),
     /not coding-harness compatible/,
@@ -276,7 +291,7 @@ test("rejects untrusted direct model records before writing the Codex catalog", 
   assert.throws(
     () => buildInfiniteModelCatalog([{
       ...base,
-      id: "promptrail/direct-header-injection",
+      id: "gpt-header-injection",
       display_name: "bad\nname",
     }]),
     /display name is invalid/,
@@ -284,7 +299,7 @@ test("rejects untrusted direct model records before writing the Codex catalog", 
   assert.throws(
     () => buildInfiniteModelCatalog([{
       ...base,
-      id: "promptrail/direct-terminal-injection",
+      id: "gpt-terminal-injection",
       display_name: "bad\u001b[31mname",
     }]),
     /display name is invalid/,
@@ -298,13 +313,14 @@ test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe"
   const catalogPath = join(directory, "models.json");
   const original = 'model = "gpt-5.6-sol"\n';
   const dynamicCatalog = buildInfiniteModelCatalog([{
-    id: "promptrail/direct-test-coder",
+    id: "gpt-5.6-terra",
     object: "model",
-    routing_mode: "direct-free-v1",
-    display_name: "test · coder",
-    description: "Direct actor.",
-    context_window: 32_000,
-    max_output_tokens: 4_096,
+    owned_by: "openai",
+    routing_mode: "subscription-direct-v1",
+    display_name: "GPT-5.6 Terra",
+    description: "Connected OpenAI subscription model.",
+    context_window: 128_000,
+    max_output_tokens: 32_768,
     capabilities: { tool_calling: true, streaming: true, reasoning: false },
   }]);
   await writeFile(configPath, original);
@@ -327,7 +343,7 @@ test("refreshes an unmodified managed Infinite catalog and keeps uninstall safe"
     const state = JSON.parse(await readFile(statePath, "utf8"));
     assert.deepEqual(
       catalog.models.map((model) => model.slug),
-      ["promptrail/infinite", "promptrail/direct-test-coder"],
+      ["promptrail/infinite", "gpt-5.6-terra"],
     );
     assert.equal(state.modelCatalogSha256, sha256(`${JSON.stringify(dynamicCatalog, null, 2)}\n`));
     await uninstallInfiniteCodexConfig(statePath);
@@ -385,6 +401,17 @@ test("restores the original config when Infinite is uninstalled", async () => {
     });
     assert.equal(helperResult.status, 0, helperResult.stderr);
     assert.equal(helperResult.stdout, `${TEST_INFINITE_TOKEN}\n`);
+    const launched = spawnSync(
+      helperPath,
+      [
+        process.execPath,
+        "-e",
+        'process.exit(process.env.PROMPTRAIL_API_KEY === "pr_test_infinite_token" ? 0 : 1)',
+      ],
+      { encoding: "utf8", env: { ...process.env, PROMPTRAIL_API_KEY: "wrong-environment-key" } },
+    );
+    assert.equal(launched.status, 0, launched.stderr);
+    assert.equal(launched.stdout, "");
     for (const publicArtifact of [configPath, statePath, helperPath]) {
       assert.doesNotMatch(await readFile(publicArtifact, "utf8"), new RegExp(TEST_INFINITE_TOKEN));
     }
