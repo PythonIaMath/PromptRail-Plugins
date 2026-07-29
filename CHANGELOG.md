@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.6
+
+### Patch Changes
+
+- 313f75f: Correct the packaged privacy and security disclosures to describe Infinite's account-bound browser authorization, one-use grants, and revocable scoped machine credentials. Stable releases now keep the npm lockfile version synchronized automatically.
+
 ## Unreleased
 
 ## 1.5.5
