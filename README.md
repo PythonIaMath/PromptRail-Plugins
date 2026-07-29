@@ -47,18 +47,25 @@ npx --yes @promptrail/plugins@latest
 Do not use `npm i @promptrail/plugins` as the setup command: it only downloads the package and does
 not run PromptRail's safe configuration migration. Use the `npx` command above.
 
-The installer asks for the PromptRail token without echoing it. The bare command is equivalent to
-`npx --yes @promptrail/plugins@latest switch infinite both`: it validates the token before changing
-either client, restores the package-managed Plugins configuration, preserves unrelated user
-settings, then installs Infinite. For non-interactive installation, pass the token in the process
-environment:
+Create a PromptRail account and activate its Infinite subscription first. The installer then starts
+a short-lived device authorization, opens the PromptRail approval page in the default browser, and
+waits for the signed-in account to approve that machine. If the browser cannot be opened, the CLI
+prints the same HTTPS URL and one-time device code for manual use.
+
+The bare command is equivalent to
+`npx --yes @promptrail/plugins@latest switch infinite both`: it obtains a machine credential before
+changing either client, restores the package-managed Plugins configuration, preserves unrelated
+user settings, then installs Infinite. Browser approval is the normal interactive path. For CI,
+recovery, or another non-interactive installation, an existing Infinite API key remains an explicit
+override:
 
 ```bash
 PROMPTRAIL_API_KEY="..." npx --yes @promptrail/plugins@latest
 ```
 
-The installer stores the token only in a user-private mode-0600 file under the selected client
-profile. Claude reads it through a mode-0700 command helper. Codex 0.145 uses its documented
+The browser flow returns a revocable, Infinite-scoped API key exactly once. The installer stores it
+only in a user-private mode-0600 file under the selected client profile; the web control plane stores
+only its hash. Claude reads it through a mode-0700 command helper. Codex 0.145 uses its documented
 `PROMPTRAIL_API_KEY` provider environment variable, so the installer prints an exact launcher
 command that reads the same private token file without exposing the token. Neither the token nor
 provider credentials are written to a repository, `config.toml`, `settings.json`, or install state.
@@ -99,7 +106,7 @@ npx --yes @promptrail/plugins@latest install infinite both
 ```
 
 This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
-Code with the PromptRail base URL and model. The key authenticates model discovery during install
+Code with the PromptRail base URL and model. Browser authorization issues the key that authenticates model discovery during install
 and normal inference afterward through the private token file and launcher/helper described above.
 Installation refuses unrelated Anthropic credential
 variables, key helpers, models, or gateways instead of overriding them. Switching modes is explicit
@@ -177,10 +184,14 @@ You need:
 
 - Node.js 18.19 or newer.
 - A current Codex or Claude Code installation.
-- A PromptRail Infinite access token. Request access at
-  [support@promptrail.ai](mailto:support@promptrail.ai).
+- A verified PromptRail account with an active Infinite subscription. Create the account and
+  complete Stripe checkout on [promptrail.ai](https://www.promptrail.ai/) before running the CLI.
+- A browser on any device that can open the one-time authorization URL. Automatic browser launch is
+  convenient but not required.
 
-Never commit your PromptRail access token to a repository or shell script.
+The CLI never asks for a Stripe secret or provider credential. Never commit a PromptRail API key to
+a repository or shell script; environment-token installation is intended only for automation and
+recovery.
 
 ## Codex
 

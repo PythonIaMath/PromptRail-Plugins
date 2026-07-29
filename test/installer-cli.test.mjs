@@ -264,6 +264,47 @@ test("installs Infinite with its API key only in child environments", async () =
   }
 });
 
+test("uses browser authorization for Infinite when no token override exists", async () => {
+  const calls = [];
+  const output = outputBuffer();
+  let authentication;
+  let preflight;
+  const status = await runCliWithPreflight({
+    argv: ["install", "infinite", "both"],
+    env: {
+      PROMPTRAIL_ACCOUNT_URL: "https://accounts.example",
+      PROMPTRAIL_INFINITE_BASE_URL: "https://gateway.example/v1",
+    },
+    input: {},
+    output: output.stream,
+    errorOutput: output.stream,
+    async authenticateInfinite(options) {
+      authentication = options;
+      return "browser-issued-token";
+    },
+    async preflightInfinite(options) {
+      preflight = options;
+      return [];
+    },
+    spawn(command, args, options) {
+      calls.push({ command, args, options });
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.equal(authentication.accountBaseUrl, "https://accounts.example");
+  assert.deepEqual(authentication.detectedHarnesses, ["codex", "claude"]);
+  assert.equal(authentication.output, output.stream);
+  assert.deepEqual(preflight, {
+    baseUrl: "https://gateway.example/v1",
+    apiKey: "browser-issued-token",
+  });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.env.PROMPTRAIL_API_KEY, "browser-issued-token");
+  assert.equal(calls[1].options.env.PROMPTRAIL_API_KEY, "browser-issued-token");
+});
+
 test("preflights Infinite authentication before changing either client", async () => {
   let spawned = false;
   let preflight;

@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Add account-based browser authorization for Infinite installs. The CLI now opens a one-time
+  PromptRail device approval after subscription checkout, exchanges it for a revocable
+  Infinite-scoped key, validates access before changing client configuration, and retains
+  environment-token installation only as an explicit automation or recovery override.
 - Keep free-provider actors internal to Infinite routing. The Codex `/model` picker now exposes
   PromptRail Infinite plus connected OpenAI subscription models, without provider-specific free
   aliases.
