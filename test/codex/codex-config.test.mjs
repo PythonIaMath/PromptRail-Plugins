@@ -201,9 +201,8 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
   assert.match(patched, /^model = "promptrail\/infinite"/m);
   assert.match(patched, /\[model_providers\.promptrail-infinite\]/);
   assert.ok(patched.includes(`base_url = ${JSON.stringify(DEFAULT_INFINITE_BASE_URL)}`));
-  assert.doesNotMatch(patched, /env_key\s*=/);
-  assert.match(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
-  assert.match(patched, /command = ".*api-key-helper\.sh"/);
+  assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
+  assert.doesNotMatch(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
   assert.match(patched, /requires_openai_auth = false/);
   assert.match(patched, /wire_api = "responses"/);
   assert.match(
@@ -402,6 +401,17 @@ test("restores the original config when Infinite is uninstalled", async () => {
     });
     assert.equal(helperResult.status, 0, helperResult.stderr);
     assert.equal(helperResult.stdout, `${TEST_INFINITE_TOKEN}\n`);
+    const launched = spawnSync(
+      helperPath,
+      [
+        process.execPath,
+        "-e",
+        'process.exit(process.env.PROMPTRAIL_API_KEY === "pr_test_infinite_token" ? 0 : 1)',
+      ],
+      { encoding: "utf8", env: { ...process.env, PROMPTRAIL_API_KEY: "wrong-environment-key" } },
+    );
+    assert.equal(launched.status, 0, launched.stderr);
+    assert.equal(launched.stdout, "");
     for (const publicArtifact of [configPath, statePath, helperPath]) {
       assert.doesNotMatch(await readFile(publicArtifact, "utf8"), new RegExp(TEST_INFINITE_TOKEN));
     }

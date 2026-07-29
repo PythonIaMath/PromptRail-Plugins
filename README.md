@@ -58,8 +58,10 @@ PROMPTRAIL_API_KEY="..." npx --yes @promptrail/plugins@latest
 ```
 
 The installer stores the token only in a user-private mode-0600 file under the selected client
-profile. Codex and Claude read it through a mode-0700 command helper. Neither the token nor provider
-credentials are written to a repository, `config.toml`, `settings.json`, or install state.
+profile. Claude reads it through a mode-0700 command helper. Codex 0.145 uses its documented
+`PROMPTRAIL_API_KEY` provider environment variable, so the installer prints an exact launcher
+command that reads the same private token file without exposing the token. Neither the token nor
+provider credentials are written to a repository, `config.toml`, `settings.json`, or install state.
 
 To install the local Plugins mode instead, select it explicitly. The installer asks for its token
 without echoing it:
@@ -98,7 +100,7 @@ npx --yes @promptrail/plugins@latest install infinite both
 
 This configures Codex with `promptrail/infinite` and a PromptRail Responses provider, and Claude
 Code with the PromptRail base URL and model. The key authenticates model discovery during install
-and normal inference afterward through the private token file and helper described above.
+and normal inference afterward through the private token file and launcher/helper described above.
 Installation refuses unrelated Anthropic credential
 variables, key helpers, models, or gateways instead of overriding them. Switching modes is explicit
 and first restores the other mode's managed settings:
