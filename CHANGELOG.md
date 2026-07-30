@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.7
+
+### Patch Changes
+
+- 689356f: Route browser-authorized Infinite clients through the tenant-aware control-plane gateway.
+
 ## 1.5.6
 
 ### Patch Changes
