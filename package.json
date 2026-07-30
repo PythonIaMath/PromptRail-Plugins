@@ -1,7 +1,7 @@
 {
   "name": "@promptrail/plugins",
   "version": "1.5.8",
-  "description": "PromptRail Infinite for Codex and Claude Code, with hosted free-first routing and an explicit local Plugins mode.",
+  "description": "PromptRail Infinite adds an optional Codex routing profile while preserving your normal model catalog.",
   "type": "module",
   "bin": {
     "plugins": "bin/promptrail.mjs",
