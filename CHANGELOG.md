@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.9
+
+### Patch Changes
+
+- 608fd67: Make Infinite a separate Codex profile while preserving the user's normal model catalog.
+
 ## 1.5.8
 
 ### Patch Changes
