@@ -86,7 +86,7 @@ test("generates an Infinite Claude configuration without storing a PromptRail ke
   assert.equal(patched.env.KEEP_ME, "yes");
   assert.equal(
     patched.env.ANTHROPIC_BASE_URL,
-    "https://promptrail--promptrail-infinite-beta-gateway-server.us-west.modal.direct",
+    "https://buygenius-savings--promptrail-infinite-control-plane-bet-de3a38.us-west.modal.direct",
   );
   assert.equal(patched.env.ANTHROPIC_MODEL, "promptrail/infinite");
   assert.equal(patched.env.CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY, "1");
