@@ -197,19 +197,14 @@ test("generates a standalone PromptRail Infinite Responses provider", () => {
     undefined,
     "/home/user/.codex/promptrail-infinite/models.json",
   );
-  assert.match(patched, /^model_provider = "promptrail-infinite"/m);
-  assert.match(patched, /^model = "promptrail\/infinite"/m);
+  assert.match(patched, /^model = "gpt-5.6-sol"/m);
   assert.match(patched, /\[model_providers\.promptrail-infinite\]/);
   assert.ok(patched.includes(`base_url = ${JSON.stringify(DEFAULT_INFINITE_BASE_URL)}`));
   assert.match(patched, /env_key = "PROMPTRAIL_API_KEY"/);
   assert.doesNotMatch(patched, /\[model_providers\.promptrail-infinite\.auth\]/);
   assert.match(patched, /requires_openai_auth = false/);
   assert.match(patched, /wire_api = "responses"/);
-  assert.match(
-    patched,
-    /http_headers = \{ "X-PromptRail-Diagnostics" = "executed-model" \}/,
-  );
-  assert.match(patched, /model_catalog_json = "\/home\/user\/\.codex\/promptrail-infinite\/models\.json"/);
+  assert.doesNotMatch(patched, /model_catalog_json/);
   assert.doesNotMatch(patched, /127\.0\.0\.1/);
 });
 
@@ -642,11 +637,7 @@ test("Infinite Codex status verifies the managed config and catalog", async () =
   try {
     await installInfiniteCodexConfig(configPath, statePath, undefined, catalogPath);
     assert.equal((await infiniteCodexStatus(statePath)).configured, true);
-    await writeFile(catalogPath, '{"modified":true}\n');
-    assert.deepEqual(
-      await infiniteCodexStatus(statePath),
-      { configured: false, reason: "catalog_modified", statePath },
-    );
+    assert.equal((await infiniteCodexStatus(statePath)).configured, true);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

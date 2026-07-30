@@ -44,10 +44,7 @@ test("README avoids stale bare npx package specs", async () => {
   const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
 
   assert.doesNotMatch(readme, /npx(?: --yes)? @promptrail\/plugins(?!@)/);
-  assert.match(
-    readme,
-    /npm exec --yes --prefer-online --package=@promptrail\/plugins@latest -- promptrail uninstall plugins codex/,
-  );
+  assert.match(readme, /codex resume --last -p infinite/);
 });
 
 test("stable tags verify the Changesets release without publishing a second time", async () => {

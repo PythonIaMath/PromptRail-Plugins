@@ -19,8 +19,8 @@ test("installs a managed normal codex command without exposing the token", async
       environment: { HOME: home, SHELL: "/bin/zsh" },
     });
     const contents = await readFile(profile, "utf8");
-    assert.match(contents, /alias codex='\/private\/promptrail\/api-key-helper\.sh codex'/);
-    assert.match(contents, /PromptRail Infinite Codex \(managed\)/);
+    assert.match(contents, /alias infinite='\/private\/promptrail\/api-key-helper\.sh codex -p infinite'/);
+    assert.match(contents, /PromptRail Infinite profile \(managed\)/);
     await removeInfiniteCodexShellAlias(installed.state);
     assert.equal(await readFile(profile, "utf8"), "export KEEP_ME=yes\n");
   } finally {
