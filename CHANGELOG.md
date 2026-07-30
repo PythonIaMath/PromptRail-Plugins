@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.8
+
+### Patch Changes
+
+- 56bf25c: Let Infinite users launch Codex with the normal `codex` command after installation.
+
 ## 1.5.7
 
 ### Patch Changes
