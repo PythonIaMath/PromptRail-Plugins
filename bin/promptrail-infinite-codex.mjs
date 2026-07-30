@@ -49,7 +49,7 @@ async function main() {
       `PromptRail Infinite Codex configuration installed: ${installed.path}\n`
       + `${subscriptionModels} OpenAI subscription model${subscriptionModels === 1 ? "" : "s"} added to /model. `
       + `The PromptRail token is stored in a user-only file. Restart Codex to reload the catalog.\n`
-      + `Start Infinite Codex with:\n  ${shellQuote(installed.helperPath)} codex\n`,
+      + "Open a new terminal, then start Codex normally with: codex\n",
     );
     return;
   }
