@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.10
+
+### Patch Changes
+
+- 3b4f5a7: Prevent Infinite sessions from treating the internal OmniRoute executor as an MCP server.
+- e1133db: Provide Infinite model metadata inside its Codex profile without changing the user's base catalog.
+
 ## 1.5.9
 
 ### Patch Changes
